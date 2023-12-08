@@ -14,6 +14,7 @@
 #define BUFFER_SIZE 1024
 #define NICKNAME_SIZE 64
 #define MAX_CLIENTS 5
+#define MAX_ROUNDS 5
 
 
 struct ClientInfo{
@@ -32,11 +33,18 @@ struct Game{
     int current_players_count;
     std::vector<std::string> words;
     int epoll_fd;
+    int status;
 };
 
-
-
 std::map<int, Game*> activeGames;
+
+
+void gameLogic(Game * game){
+    //game logic
+    printf("Game %d started\n", game->id);
+    sleep(3);
+    game->status = 2;
+}
 
 void * handleClient(void * arg){
     ClientInfo * client = (ClientInfo *)arg;
@@ -90,12 +98,29 @@ void * handleClient(void * arg){
     client->name = nickname;
     printf("Nickname: %s\n", client->name.c_str());
 
-    // if(game->current_players_count == game->players_count){
-    //     send(client->socket, "Game started.\n", 14, 0);
-    // } else {
-    //     send(client->socket, "Waiting for other players...\n", 29, 0);
-    // }
+    send(client->socket, "Waiting for other players...\n", 29, 0);
+    game->status = 0;
 
+    //Have to wait for the players to join
+
+    if(game->current_players_count == game->players_count){
+        game->status = 1;
+        send(client->socket, "Game started.\n", 14, 0);
+    } else {
+        send(client->socket, "Waiting for other players...\n", 29, 0);
+    }
+
+    while (game->status == 0)
+    {
+        sleep(1);
+    }
+    
+    if (game->status == 1){
+        gameLogic(game);
+    }
+
+    printf("Game %d finished\n", game->id); 
+    
 
 
     while(true){
