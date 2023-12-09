@@ -48,10 +48,10 @@ void gameLogic(Game * game){
     //game logic
     printf("Game %d started\n", game->id);
 
-
-    for(int i = 0; i<game->current_players_count; i++){
-        send(game->players[i]->socket, "Game started.\n", 14, 0);
-    }
+//Need some sort of lock, causes segfault
+    // for(int i = 0; i<game->current_players_count; i++){
+    //     send(game->players[i]->socket, "Game started.\n", 14, 0);
+    // }
 
     
     
