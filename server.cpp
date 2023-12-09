@@ -10,6 +10,9 @@
 #include <vector>
 #include <sys/epoll.h>
 #include <map>
+#include <pthread.h>
+#include <mutex>
+#include <condition_variable>
 
 #define BUFFER_SIZE 1024
 #define NICKNAME_SIZE 64
@@ -34,6 +37,8 @@ struct Game{
     std::vector<std::string> words;
     int epoll_fd;
     int status;
+    std::mutex mutex;
+    std::condition_variable players_ready;
 };
 
 std::map<int, Game*> activeGames;
@@ -42,7 +47,14 @@ std::map<int, Game*> activeGames;
 void gameLogic(Game * game){
     //game logic
     printf("Game %d started\n", game->id);
-    sleep(3);
+
+
+    for(int i = 0; i<game->current_players_count; i++){
+        send(game->players[i]->socket, "Game started.\n", 14, 0);
+    }
+
+    
+    
     game->status = 2;
 }
 
@@ -54,9 +66,20 @@ void * handleClient(void * arg){
     char playersCount[2];
 
     send(client->socket, "Connected.\n", 11, 0);
+
+    send(client->socket, "Please enter your nickname.\n", 27,0);
+
+    int valread = read(client->socket, nickname, sizeof(nickname));
+    if(valread == 0){
+        printf("Client not connected\n");
+    }
+    nickname[valread] = '\0';
+    client->name = nickname;
+    printf("Nickname: %s\n", client->name.c_str());
+
     send(client->socket, "Please enter your game id.\n", 27,0);
 
-    int valread = read(client->socket, gameId, sizeof(gameId));
+    valread = read(client->socket, gameId, sizeof(gameId));
         if(valread == 0){
             printf("Client not connected\n");
         }
@@ -66,8 +89,13 @@ void * handleClient(void * arg){
 
     Game* game;
     if (activeGames.find(client->game_id) != activeGames.end()) {
+        // Game already exists 
         game = activeGames[client->game_id];
         game->current_players_count++;
+        if (game->current_players_count == game->players_count) {
+        // Notify all waiting players that the required number of players has been reached
+        game->players_ready.notify_all();
+    }
         }else {        
         // Create a new game
         game = new Game;
@@ -88,26 +116,18 @@ void * handleClient(void * arg){
 
     game->players.push_back(client);
 
-    send(client->socket, "Please enter your nickname.\n", 27,0);
-
-    valread = read(client->socket, nickname, sizeof(nickname));
-    if(valread == 0){
-        printf("Client not connected\n");
-    }
-    nickname[valread] = '\0';
-    client->name = nickname;
-    printf("Nickname: %s\n", client->name.c_str());
 
     send(client->socket, "Waiting for other players...\n", 29, 0);
-    game->status = 0;
 
-    //Have to wait for the players to join
+    // Wait for all players to join
+
+    std::unique_lock<std::mutex> lock(game->mutex);
+    game->status = 0;
+    game->players_ready.wait(lock, [game] { return game->current_players_count == game->players_count; });
+    
 
     if(game->current_players_count == game->players_count){
         game->status = 1;
-        send(client->socket, "Game started.\n", 14, 0);
-    } else {
-        send(client->socket, "Waiting for other players...\n", 29, 0);
     }
 
     while (game->status == 0)
@@ -118,8 +138,10 @@ void * handleClient(void * arg){
     if (game->status == 1){
         gameLogic(game);
     }
-
+    game->status = 2;
     printf("Game %d finished\n", game->id); 
+    printf("Game %d status: %d\n", game->id, game->status);
+
     
 
 
