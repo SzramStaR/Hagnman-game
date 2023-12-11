@@ -1,0 +1,5 @@
+<RCC>
+  <qresource prefix="retroFont">
+    <file>retro_computer_personal_use.ttf</file>
+  </qresource>
+</RCC>
