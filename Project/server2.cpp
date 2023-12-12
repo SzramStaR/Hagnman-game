@@ -4,147 +4,199 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
-#include <fcntl.h>
-#include <netinet/in.h>
-#include <errno.h>
-#include <vector>
-#include <sys/epoll.h>
-#include <map>
+#include <cstring>
 #include <pthread.h>
+#include <map>
 #include <mutex>
+#include <queue>
 #include <condition_variable>
+#include <vector>
+#include <fstream>
+#include "WordManager.cpp"
+
 
 #define BUFFER_SIZE 1024
-#define NICKNAME_SIZE 64
-#define MAX_CLIENTS 3
-#define MAX_ROUNDS 5
+#define MAX_PLAYER_COUNT 3
+#define MAX_ROUNDS_COUNT 5
 
 struct ClientInfo {
-    int socket;
-    sockaddr_in address;
-    std::string name;
     int game_id;
-    int score;
+    std::string nickname;
+    int client_socket;
 };
 
-struct Game {
+std::mutex mutex; // Declare a mutex
+std::condition_variable cv; // Declare a condition variable
+bool isGameThreadReady = false; // Variable to indicate whether the game thread is ready
+
+struct GameInfo {
     int id;
-    std::vector<ClientInfo *> players;
-    int round;
-    int players_count;
     int current_players_count;
-    std::vector<std::string> words;
-    int epoll_fd;
-    int status;
-    std::mutex mutex;
-    std::condition_variable players_ready;
+    int current_round;
+    pthread_t thread;
+    std::queue<ClientInfo *> joinRequests; // Queue for join requests
+    std::vector<int> connectedClients; 
 };
 
-std::map<int, Game *> activeGames;
+std::map<int, GameInfo *> activeGames;
+std::map<int, ClientInfo *> clientInfoMap;
 
-void gameLogic(Game *game) {
-    // game logic
-    printf("Game %d started\n", game->id);
-    game->status = 2;
+
+
+void informAllClients(GameInfo *game, const std::string &message) {
+    for (int client_socket : game->connectedClients) {
+        send(client_socket, message.c_str(), message.length(), 0);
+    }
 }
 
-void *handleClient(void *arg) {
-    ClientInfo *client = (ClientInfo *)arg;
-    char buffer[BUFFER_SIZE];
-    char nickname[NICKNAME_SIZE];
-    char gameId[2];
-    char playersCount[2];
+void *gameServer(void *arg) {
+    GameInfo *game = static_cast<GameInfo *>(arg);
 
-    int valread = read(client->socket, buffer, sizeof(buffer));
+    game->current_players_count = 0;
+    game->current_round = 0;
+    
+
+    // Game logic goes here
+    while (true) {
+        
+
+        // Check for join requests
+        if (!game->joinRequests.empty()) {
+            // Process the join request
+            ClientInfo *joinRequest = game->joinRequests.front();
+            game->joinRequests.pop();
+
+            // Access the information about the client
+            int game_id = joinRequest->game_id;
+            std::string nickname = joinRequest->nickname;
+            int client_socket = joinRequest->client_socket;
+
+            printf("Processing join request: Game ID %d, Nickname %s, Client Socket %d\n", game_id, nickname.c_str(), client_socket);
+
+            if (game->current_players_count < MAX_PLAYER_COUNT) {
+                std::string response = "ok"; // Modify as needed
+                printf("Client can join\n");
+                send(client_socket, response.c_str(), response.length(), 0);
+                game->current_players_count += 1;
+                game->connectedClients.push_back(client_socket);
+            } else {
+                std::string response = "no"; // Modify as needed
+                printf("Client cannot join\n");
+                send(client_socket, response.c_str(), response.length(), 0);
+            }
+
+            // Clean up the ClientInfo instance
+            delete joinRequest;
+        }
+
+        if (game->current_players_count == MAX_PLAYER_COUNT) {
+            // Notify the main thread that the game thread is ready
+            {
+                std::lock_guard<std::mutex> lock(mutex);
+                isGameThreadReady = true;
+                printf("Game ready\n");
+            }
+            cv.notify_one();
+            
+
+            // Inform all clients that the game is starting
+            informAllClients(game, "start");
+            printf("Informed all clients about the start\n");
+            WordManager wordManager("words.txt");
+
+            
+            //game starts
+            while(game->current_round < MAX_ROUNDS_COUNT){
+                std::string randomWord = wordManager.getRandomWord();
+                randomWord += "\n";
+                std::cout << "Random word: " << randomWord << std::endl;
+            
+                informAllClients(game, randomWord);
+
+            }
+        }  
+    }
+
+    return nullptr;
+}
+
+
+
+void *handleClient(void *arg) {
+    int client_socket = *(int *)arg;
+
+    char buffer[BUFFER_SIZE];
+    int valread = read(client_socket, buffer, sizeof(buffer));
     if (valread == 0) {
         printf("Client not connected\n");
+        close(client_socket);
+        return nullptr;
     }
 
     buffer[valread] = '\0';
     std::string received_data(buffer);
 
-    // Split the received data into nickname and game ID using a delimiter (e.g., space)
     size_t delimiter_pos = received_data.find(' ');
     if (delimiter_pos != std::string::npos) {
-        client->name = received_data.substr(0, delimiter_pos);
-        printf("Nickname: %s\n", client->name.c_str());
-        client->game_id = atoi(received_data.substr(delimiter_pos + 1).c_str());
-        printf("Game id: %d\n", client->game_id);
+        std::string nickname = received_data.substr(0, delimiter_pos);
+        printf("Nickname: %s\n", nickname.c_str());
+        int game_id = atoi(received_data.substr(delimiter_pos + 1).c_str());
+        printf("Game id: %d\n", game_id);
+
+        // Connect to game server or create if not exists
+        mutex.lock();
+        GameInfo *game = nullptr;
+        if (activeGames.find(game_id) != activeGames.end()) {
+            game = activeGames[game_id];
+            printf("there is a game");
+        } else {
+            game = new GameInfo;
+            game->id = game_id;
+            game->current_players_count = 0; // Initialize with 0, incremented as players join
+
+            activeGames[game_id] = game;
+            
+             printf("Active Games:\n");
+        for (const auto& entry : activeGames) {
+            printf("Game ID: %d, Current Players Count: %d\n", entry.first, entry.second->current_players_count);
+        }
+            // Create a new thread for the game server
+            if (pthread_create(&game->thread, nullptr, gameServer, (void *)game) != 0) {
+                perror("pthread_create error");
+                // Handle thread creation failure, cleanup, and exit if needed
+            }
+
+            // Wait for the game thread to be ready
+            // printf("Waiting for the game thread to be ready\n");
+            // std::unique_lock<std::mutex> lock(mutex);
+            // cv.wait(lock, [] { return isGameThreadReady; });
+            // printf("Now waiting\n");
+        }
+
+        // Store client info
+        ClientInfo *clientInfo = new ClientInfo;
+        clientInfo->game_id = game_id;
+        clientInfo->nickname = nickname;
+        clientInfo->client_socket = client_socket;
+        clientInfoMap[client_socket] = clientInfo;
+        printf("Client info stored\n");
+
+        // Add the join request to the game thread's queue
+        game->joinRequests.push(clientInfo);
+        printf("Join request added to the queue\n");
+
+        mutex.unlock();
     } else {
-        // Handle the case where there is no delimiter or the format is incorrect
         printf("Invalid data format received from the client.\n");
-        // You may want to close the connection or handle the error appropriately
+        close(client_socket);
     }
 
-    Game *game;
-    if (activeGames.find(client->game_id) != activeGames.end()) {
-        // Game already exists
-        game = activeGames[client->game_id];
-        game->current_players_count++;
-        if (game->current_players_count == game->players_count) {
-            // Notify all waiting players that the required number of players has been reached
-            game->players_ready.notify_all();
-        }
-    } else {
-        // Create a new game
-        game = new Game;
-        game->id = client->game_id;
-        activeGames[client->game_id] = game;
-        printf("Game created\n");
-        game->players_count = MAX_CLIENTS;
-        game->current_players_count = 1;
-        printf("Players count: %d\n", game->players_count);
-    }
-
-    game->players.push_back(client);
-
-    // Wait for all players to join
-    std::unique_lock<std::mutex> lock(game->mutex);
-    game->status = 0;
-    game->players_ready.wait(lock, [game] { return game->current_players_count == game->players_count; });
-
-    if (game->current_players_count == game->players_count) {
-        game->status = 1;
-        for (int i = 0; i < game->current_players_count; i++) {
-            send(game->players[i]->socket, "StartGame", 9, 0);
-        }
-
-    }
-
-    while (game->status == 0) {
-        sleep(1);
-    }
-
-    if (game->status == 1) {
-        gameLogic(game);
-    }
-    game->status = 2;
-    printf("Game %d finished\n", game->id);
-    printf("Game %d status: %d\n", game->id, game->status);
-
-    while (true) {
-        valread = read(client->socket, buffer, sizeof(buffer));
-        if (valread == 0) {
-            printf("%s disconnected\n", client->name.c_str());
-            break;
-        }
-        buffer[valread] = '\0';
-
-        printf("%s: %s\n", client->name.c_str(), buffer);
-    }
-
-    close(client->socket);
-    delete client;
     return nullptr;
 }
 
-int main(int argc, char *argv[]) {
-    int PORT = atoi(argv[1]);
-    printf("PORT: %d\n", PORT);
+
+int main() {
    
-
-    char buffer[BUFFER_SIZE];
-
     int server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_sockfd == -1) {
         perror("socket error");
@@ -153,7 +205,7 @@ int main(int argc, char *argv[]) {
 
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(PORT);
+    server_addr.sin_port = htons(2000); // Replace with your server port
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     if (bind(server_sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
@@ -166,47 +218,28 @@ int main(int argc, char *argv[]) {
         exit(EXIT_FAILURE);
     }
 
-    int client_count = 0;
-    pthread_t threads[MAX_CLIENTS];
-    int client_sockets[MAX_CLIENTS] = {0};  // Store client sockets
+    printf("Server listening on port 2000...\n");
 
     while (true) {
-        // New client connection
         sockaddr_in client_addr;
         socklen_t client_addr_len = sizeof(client_addr);
-        int client_socket = accept(server_sockfd, (struct sockaddr *)&client_addr, &client_addr_len);
-        if (client_socket == -1) {
+        int *client_socket = new int(accept(server_sockfd, (struct sockaddr *)&client_addr, &client_addr_len));
+        if (*client_socket == -1) {
             perror("accept error");
-            exit(EXIT_FAILURE);
+            continue;
         }
 
         printf("New client connected\n");
 
-        // Increment client_count only if it's less than MAX_CLIENTS
-        if (client_count < MAX_CLIENTS) {
-            client_sockets[client_count] = client_socket;  // Store the client socket
-            ClientInfo *client = new ClientInfo;
-            client->socket = client_socket;
-            client->address = client_addr;
-            client->name = "";  // Initialize the name to an empty string
-            client->game_id = 0;
-            if (pthread_create(&threads[client_count], nullptr, handleClient, (void *)client) != 0) {
-                perror("pthread_create error");
-                close(client_socket);
-                delete client;
-                exit(EXIT_FAILURE);
-            }
-            client_count++;
+        // Create a new thread for each client
+        pthread_t client_thread;
+        if (pthread_create(&client_thread, nullptr, handleClient, (void *)client_socket) != 0) {
+            perror("pthread_create error");
+            // Handle thread creation failure, cleanup, and exit if needed
         }
 
-        if (client_count == MAX_CLIENTS) {
-            printf("Max clients reached\n");
-            break;
-        }
-    }
-
-    for (int i = 0; i < client_count; i++) {
-        pthread_join(threads[i], nullptr);
+        // Detach the thread to clean up resources automatically
+        pthread_detach(client_thread);
     }
 
     close(server_sockfd);

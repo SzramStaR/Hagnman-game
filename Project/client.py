@@ -5,12 +5,14 @@ import socket
 import random
 from time import sleep
 
+
 sys.path.append('/StartDialogUI.py')
 from StartDialogUI import Ui_StartDialog
 
 sys.path.append('/HangmanGameScreen.py')
 from HangmanGameScreen import Ui_GameScreen
 
+BUFFER_SIZE = 1024
 
 class GameWindow(QWidget, Ui_GameScreen):
     def __init__(self):
@@ -22,8 +24,12 @@ class GameWindow(QWidget, Ui_GameScreen):
         self.used_letters = set()
         self.round = 0
         self.total_score = 0
-
         self.start_new_game()
+        # self.start_new_round()
+        # self.connection_thread.signal_round_start.connect(self.start_new_round)
+
+    def connect_signals(self, connection_thread):
+        connection_thread.signal_round_start.connect(self.start_new_round)
 
     def keyPressEvent(self, event):
         key = event.text().upper()
@@ -54,10 +60,12 @@ class GameWindow(QWidget, Ui_GameScreen):
 
         self.update_used_letters_label()
 
-    def start_new_game(self):
+
+    
+    def start_new_round(self, secret_word):
         if self.round < 5:
             # Initialize or reset round variables
-            self.word_to_guess = self.generate_random_word().upper()
+            self.word_to_guess = secret_word.upper()
             self.current_word_state = "_" * len(self.word_to_guess)
             self.used_letters = set()
 
@@ -72,13 +80,12 @@ class GameWindow(QWidget, Ui_GameScreen):
             # End of the game, display final score
             self.handle_game_over(f"Game over! Your final score is {self.total_score}")
 
-    def generate_random_word(self):
-        # Replace this with your own logic to fetch words from a database or file
-        word_list = ["PYTHON", "JAVA", "CPLUSPLUS", "JAVASCRIPT", "HTML", "CSS"]
-        return random.choice(word_list)
+    # def generate_random_word(self):
+    #     # Replace this with your own logic to fetch words from a database or file
+    #     word_list = ["PYTHON", "JAVA", "CPLUSPLUS", "JAVASCRIPT", "HTML", "CSS"]
+    #     return random.choice(word_list)
 
     def update_word_label(self):
-        # Update the word label with the current state of the word
         self.wordLabel.setText(" ".join(self.current_word_state))
 
     def update_attempts_label(self):
@@ -89,7 +96,6 @@ class GameWindow(QWidget, Ui_GameScreen):
         self.usedLettersLabel.setText(used_letters_text)
 
     def handle_round_over(self, message):
-        # Show a message box with the round result
         QMessageBox.information(self, "Round Over", message, QMessageBox.Ok)
 
         round_score = self.attempts_left_per_game
@@ -115,27 +121,34 @@ class GameWindow(QWidget, Ui_GameScreen):
 
 class ConnectionThread(QThread):
     signal_game_start = pyqtSignal()
+    signal_secret_word = pyqtSignal(str)
+    signal_round_start = pyqtSignal(str)
+    
 
     def __init__(self, nick_name, game_id):
         super(ConnectionThread, self).__init__()
         self.nick_name = nick_name
         self.game_id = game_id
+        self.client_socket = None
 
     def run(self):
         try:
-            server_address = ('localhost', 1234)
+            server_address = ('localhost', 2000)
             self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.client_socket.connect(server_address)
 
             message = f"{self.nick_name} {self.game_id}"
             self.client_socket.sendall(message.encode('utf-8'))
 
-            # Wait for a signal from the server indicating that the game is ready to start
-            response = self.client_socket.recv(1024).decode('utf-8')
+            response = self.client_socket.recv(2).decode('utf-8')
 
-            if response == "GameStart":
-                print("All players connected. Starting the game.")
-                self.signal_game_start.emit()
+            if response == "ok":
+                print("Joined game.")
+                self.handle_game_logic() 
+
+            elif response == "no":
+                print("Full room.")
+                
 
             else:
                 print("Unexpected message from the server:", response)
@@ -144,6 +157,26 @@ class ConnectionThread(QThread):
         except Exception as e:
             print("Error connecting to server:", e)
 
+    def get_secret_word(self):
+        secret_word =""
+        while True:
+            chunk = self.client_socket.recv(BUFFER_SIZE).decode('utf-8')
+            secret_word+= chunk
+
+            if '\n' in secret_word:
+                break
+        return secret_word
+ 
+            
+    def handle_game_logic(self):
+        print("debug")
+        start_message = self.client_socket.recv(5).decode('utf-8')
+        print(start_message)
+        if start_message == "start":
+            secret_word = self.get_secret_word()
+            self.signal_round_start.emit(secret_word)
+        else:
+            print("Unexpected message from the server:", start_message)
 
 class StartDialog(QDialog, Ui_StartDialog):
     def __init__(self):
@@ -161,8 +194,9 @@ class StartDialog(QDialog, Ui_StartDialog):
         try:
             
             self.connection_thread = ConnectionThread(nick_name, game_id)
-            self.connection_thread.signal_game_start.connect(self.onGameStart)
+          
             self.connection_thread.start()
+            # self.connection_thread.handle_game_logic()
         except Exception as e:
             QMessageBox.warning(self, "Connection Error", f"Error connecting to server: {e}", QMessageBox.Ok)
 
@@ -176,10 +210,12 @@ class StartDialog(QDialog, Ui_StartDialog):
     #     self.client_socket.sendall(f"{game_id}".encode("utf-8"))
 
     def onGameStart(self):
-        # This method is called when the game is ready to start
-        # Hide the current dialog and show the game window
         self.hide()
         self.game_window = GameWindow()
+        self.game_window.connect_signals(self.connection_thread)  
+    
+# losowanie
+    
         self.game_window.show()
         
     
