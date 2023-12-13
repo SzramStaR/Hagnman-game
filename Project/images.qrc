@@ -1,0 +1,7 @@
+<RCC>
+  <qresource prefix="nowyPrzedrostek">
+    <file>or_create_new_game.png</file>
+    <file>select_existing_game.png</file>
+    <file>a0e46391894ff0de4550420292842c95.png</file>
+  </qresource>
+</RCC>
