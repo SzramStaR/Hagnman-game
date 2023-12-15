@@ -37,6 +37,7 @@ struct GameInfo {
     pthread_t thread;
     std::queue<ClientInfo *> joinRequests; // Queue for join requests
     std::vector<int> connectedClients; 
+    std::string nicknamesString;
 };
 
 std::map<int, GameInfo *> activeGames;
@@ -67,6 +68,27 @@ void informAllClients(GameInfo *game, const std::string &message) {
     }
 }
 
+// should returning nicknames separated by space ending with newline
+// std::string getNicknamesInGame(int game_id) {
+//     std::string nicknamesString;
+
+//     if (activeGames.find(game_id) != activeGames.end()) {
+//         GameInfo *game = activeGames[game_id];
+
+//         for (int client_socket : game->connectedClients) {
+//             if (clientInfoMap.find(client_socket) != clientInfoMap.end()) {
+//                 ClientInfo *clientInfo = clientInfoMap[client_socket];
+//                 nicknamesString += clientInfo->nickname + " ";
+//             }
+//         }
+
+//         nicknamesString += "\n"; 
+//     }
+
+//     return nicknamesString;
+// }
+
+
 void *gameServer(void *arg) {
     GameInfo *game = static_cast<GameInfo *>(arg);
 
@@ -95,6 +117,7 @@ void *gameServer(void *arg) {
             // Access the information about the client
             int game_id = joinRequest->game_id;
             std::string nickname = joinRequest->nickname;
+            game->nicknamesString += nickname + " ";
             int client_socket = joinRequest->client_socket;
             sock_to_nickname_map[client_socket] = nickname;
 
@@ -103,6 +126,7 @@ void *gameServer(void *arg) {
             if (game->current_players_count < MAX_PLAYER_COUNT) {
                 std::string response = "ok\n"; // Modify as needed
                 printf("Client can join\n");
+                printf("Current players: %s\n", game->nicknamesString.c_str());
                 send(client_socket, response.c_str(), response.length(), 0);
                 game->current_players_count += 1;
                 game->connectedClients.push_back(client_socket);
