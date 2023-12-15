@@ -134,7 +134,7 @@ void *gameServer(void *arg) {
             WordManager wordManager("words.txt");
 
             //select setup
-            fd_set readfds;
+            fd_set readfds, readfds_copy;
             FD_ZERO(&readfds);
             int max_sd = 0;
             for (int client_socket : game->connectedClients) {
@@ -147,6 +147,8 @@ void *gameServer(void *arg) {
 
             
             while(game->current_round < MAX_ROUNDS_COUNT){
+                //select is destructive so we need to copy it
+                readfds_copy = readfds;
                 game -> current_round += 1;
                 if(game->current_round == 1){
                     
@@ -160,13 +162,13 @@ void *gameServer(void *arg) {
                 
 
 
-                int clientActivity = select(max_sd + 1, &readfds, NULL, NULL, NULL);
+                int clientActivity = select(max_sd + 1, &readfds_copy, NULL, NULL, NULL);
                 if(clientActivity < 0){
                     perror("select error");
                     exit(EXIT_FAILURE);
                 } else if(clientActivity > 0){
                     for (int client_socket : game->connectedClients) {
-                        if(FD_ISSET(client_socket, &readfds)){
+                        if(FD_ISSET(client_socket, &readfds_copy)){
                             char buffer[BUFFER_SIZE];
                             int valread = read(client_socket, buffer, sizeof(buffer));
                             if (valread == 0) {
