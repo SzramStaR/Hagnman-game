@@ -147,12 +147,17 @@ void *gameServer(void *arg) {
 
             
             while(game->current_round < MAX_ROUNDS_COUNT){
-                informAllClients(game, "n\n");
-                std::string randomWord = wordManager.getRandomWord();
-                randomWord += "\n";
-                std::cout << "Random word: " << randomWord << std::endl;
                 game -> current_round += 1;
-                informAllClients(game, randomWord);
+                if(game->current_round == 1){
+                    
+                    informAllClients(game, "n\n");
+                    std::string randomWord = wordManager.getRandomWord();
+                    randomWord += "\n";
+                    std::cout << "Random word: " << randomWord << std::endl;
+                    
+                    informAllClients(game, randomWord);
+                }
+                
 
 
                 int clientActivity = select(max_sd + 1, &readfds, NULL, NULL, NULL);
@@ -177,17 +182,22 @@ void *gameServer(void *arg) {
                                 std::cout << sock_to_nickname_map[client_socket] << " won the round" << std::endl; 
                                 ranking[sock_to_nickname_map[client_socket]] += 10;
                                 informAllClients(game, "n\n");
-                                sendChancesToAllClients(game, chances);
+                                std::string randomWord = wordManager.getRandomWord();
+                                randomWord += "\n";
+                                game->current_round += 1;
+                                informAllClients(game, randomWord);
+
+                                //sendChancesToAllClients(game, chances);
                             } else if(received_data == "+\n"){
                                 std::cout << sock_to_nickname_map[client_socket] << " guessed the letter" << std::endl; 
                                 ranking[sock_to_nickname_map[client_socket]] += 1;
-                                informAllClients(game, "+\n");
-                                sendChancesToAllClients(game, chances);
+                                //informAllClients(game, "+\n");
+                                //sendChancesToAllClients(game, chances);
                             } else if(received_data == "-\n"){
                                 std::cout << sock_to_nickname_map[client_socket] << "failed to guess the later " << std::endl; 
                                 chances[sock_to_nickname_map[client_socket]] -= 1;
-                                informAllClients(game, "-\n");
-                                sendChancesToAllClients(game, chances); 
+                                //informAllClients(game, "-\n");
+                                //sendChancesToAllClients(game, chances); 
                             }
                         }
                     }
@@ -210,15 +220,17 @@ void *gameServer(void *arg) {
 
 
                 // to sa fake rzeczy fake rozgrywka bo nic nie odbiera od klientow na razie
-                sleep(30);
-                std::string info = "n\n";
-                informAllClients(game, info);
-                randomWord = wordManager.getRandomWord();
-                randomWord += "\n";
-                std::cout << "Random word drugie : " << randomWord << std::endl;
-                sleep(30);
-                info = "e\n";
-                informAllClients(game, info);
+                // sleep(10);
+                // std::string info = "n\n";
+                // informAllClients(game, info);
+                // randomWord = wordManager.getRandomWord();
+                // randomWord += "\n";
+                // std::cout << "Random word drugie : " << randomWord << std::endl;
+                // informAllClients(game, randomWord);
+
+                // sleep(30);
+                // info = "e\n";
+                // informAllClients(game, info);
 
             }
 
