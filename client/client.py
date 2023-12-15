@@ -15,6 +15,9 @@ from time import sleep
 # no -> gracz nieprzyjety do gry - pokoj pelny lub inny problem
 # s -> zaczela sie nowa gra
 
+# - -> info ze gracz o jakims id stracil szanse
+# nickname -> przychodzi po "-" info ktoremu graczowi odjec pkt
+
 # n -> nowa runda (ktos wygral runde)
 # e -> koniec gry 
 
@@ -27,7 +30,7 @@ from HangmanGameScreen import Ui_GameScreen
 BUFFER_SIZE = 1024
 
 class GameWindow(QWidget, Ui_GameScreen):
-    def __init__(self, connection_thread, client_socket):
+    def __init__(self, connection_thread, client_socket, players_nicknames):
         super(GameWindow, self).__init__()
         self.setupUi(self)
         self.word_to_guess = ""
@@ -38,15 +41,22 @@ class GameWindow(QWidget, Ui_GameScreen):
         self.total_score = 0
         self.connection_thread = connection_thread
         self.client_socket = client_socket
+        self.players_leaderboard = {}
+
+        players_list = players_nicknames.strip().split()
+        for nickname in players_list:
+            self.players_leaderboard[nickname] = 0
      
 
     def connect_signals(self, connection_thread):
             connection_thread.signal_round_start.connect(self.start_new_round)
             print("Connected signal_round_start to start_new_round")
-            connection_thread.signal_game_start.connect(self.handle_game_start)
-            print("Connected signal_game_start to handle_game_start")
+  
             connection_thread.signal_game_end.connect(self.handle_game_over)
+            connection_thread.signal_update_hangman.connect(self.update_hangman)
 
+    def splitString(string):
+        return string.strip().split()
 
     def keyPressEvent(self, event):
         key = event.text().upper()
@@ -95,9 +105,6 @@ class GameWindow(QWidget, Ui_GameScreen):
         self.update_attempts_label()
         self.update_used_letters_label()
 
-            
-            
-        
     def update_word_label(self):
         self.wordLabel.setText(" ".join(self.current_word_state))
 
@@ -108,34 +115,29 @@ class GameWindow(QWidget, Ui_GameScreen):
         used_letters_text = "Used Letters: " + ", ".join(sorted(self.used_letters))
         self.usedLettersLabel.setText(used_letters_text)
 
-    def handle_round_over(self, message):
-        QMessageBox.information(self, "Round Over", message, QMessageBox.Ok)
-
-        round_score = self.attempts_left_per_game
-
-        self.total_score += round_score
-
-        self.start_new_round() # ??????
+    def update_hangman(self, nickname):
+        print(nickname)
 
     def handle_game_over(self, message):
         QMessageBox.information(self, "Game Over", message, QMessageBox.Ok)
 
- 
         reply = QMessageBox.question(self, "Play Again?", "Do you want to play again?", QMessageBox.Yes | QMessageBox.No)
         if reply == QMessageBox.Yes:
             self.round = 0
             self.total_score = 0
             self.attempts_left_per_game = 6
-            self.start_new_game()
+            # TO DO:
+            # wyczyścić pola do wpisania id gry i nickname w StartDialog
         else:
             self.close()
             startDialog.show()
 
 class ConnectionThread(QThread):
-    signal_game_start = pyqtSignal()
+    signal_game_start = pyqtSignal(str)
     # sygnal co wysyla slowo
     signal_round_start = pyqtSignal(str)
     signal_game_end = pyqtSignal()
+    signal_update_hangman = pyqtSignal(str)
     
 
     def __init__(self, nick_name, game_id):
@@ -161,7 +163,6 @@ class ConnectionThread(QThread):
 
             elif response == "no":
                 print("Full room.")
-                
 
             else:
                 print("Unexpected message from the server:", response)
@@ -186,7 +187,10 @@ class ConnectionThread(QThread):
         while(1):
             mess = self.recv_serv_msg()
             if mess == "s":
-                self.signal_game_start.emit()
+                players_nicknames = self.recv_serv_msg()
+                print(players_nicknames)
+                self.signal_game_start.emit(players_nicknames)
+
             elif mess == "n":
                 secret_word = self.recv_serv_msg()
                 print("secret word" ,secret_word)
@@ -194,7 +198,12 @@ class ConnectionThread(QThread):
         
             elif mess == "e":
                 self.signal_game_end.emit()
-            # cos z updatem UI ale nwm czy to w tym wątku czy innym
+            
+            elif mess == "-":
+                player_nickname = self.recv_serv_msg()
+                print(player_nickname)
+                self.signal_update_hangman.emit(player_nickname)
+                
             else:
                 print("Unexpected message from the server:", mess, " ", len(mess))     
 
@@ -206,6 +215,7 @@ class StartDialog(QDialog, Ui_StartDialog):
         super(StartDialog, self).__init__()
         self.setupUi(self)
         self.joinGameButton.clicked.connect(self.onJoinGameButtonClicked)
+        self.createGameButton.clicked.connect(self.onCreateGameButtonClicked)
         self.client_socket = None 
         self.connection_thread = None
 
@@ -220,17 +230,21 @@ class StartDialog(QDialog, Ui_StartDialog):
         try:
             self.connection_thread = ConnectionThread(nick_name, game_id)
             self.connection_thread.start()
-
             
             self.connect_signals(self.connection_thread)
-
-
         except Exception as e:
             QMessageBox.warning(self, "Connection Error", f"Error connecting to server: {e}", QMessageBox.Ok)
 
-    def start_new_game(self):
+    def onCreateGameButtonClicked(self):
+        nick_name = self.nickNameEdit.text()
+        # TO DO:
+        # pobranie game_id wolnego z serwera przez conn thread
+
+
+
+    def start_new_game(self, players_nicknames):
         self.hide()
-        self.game_window = GameWindow(self.connection_thread, self.connection_thread.client_socket)
+        self.game_window = GameWindow(self.connection_thread, self.connection_thread.client_socket, players_nicknames)
        
         self.game_window.connect_signals(self.connection_thread)  
 
