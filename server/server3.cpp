@@ -68,25 +68,6 @@ void informAllClients(GameInfo *game, const std::string &message) {
     }
 }
 
-// should returning nicknames separated by space ending with newline
-// std::string getNicknamesInGame(int game_id) {
-//     std::string nicknamesString;
-
-//     if (activeGames.find(game_id) != activeGames.end()) {
-//         GameInfo *game = activeGames[game_id];
-
-//         for (int client_socket : game->connectedClients) {
-//             if (clientInfoMap.find(client_socket) != clientInfoMap.end()) {
-//                 ClientInfo *clientInfo = clientInfoMap[client_socket];
-//                 nicknamesString += clientInfo->nickname + " ";
-//             }
-//         }
-
-//         nicknamesString += "\n"; 
-//     }
-
-//     return nicknamesString;
-// }
 
 
 void *gameServer(void *arg) {
