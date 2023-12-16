@@ -213,36 +213,29 @@ void *gameServer(void *arg) {
                     for (int client_socket : game->connectedClients) {
                         if(FD_ISSET(client_socket, &readfds_copy)){
                             char buffer[BUFFER_SIZE];
-                            // TO DO: 
-                            // use read untill new line (readMsg - and add error handling)
-                            
-                            // int valread = read(client_socket, buffer, sizeof(buffer));
-                            // if (valread == 0) {
-                            //     std::cout<<sock_to_nickname_map[client_socket] << " disconnected" << std::endl;
-                            //     close(client_socket);
-                            //     return nullptr;
-                            // }
-
-                            // buffer[valread] = '\0';
-                            // td::string received_data(buffer);
 
                             std::string msg = readMsg(client_socket);
                             std::cout << "Received data:" << msg << " from:  " << sock_to_nickname_map[client_socket] << std::endl;
                             if(msg == "w"){
                                 std::cout << sock_to_nickname_map[client_socket] << " won the round" << std::endl; 
                                 ranking[sock_to_nickname_map[client_socket]] += 10;
-                                informAllClients(game, "n\n");
-                                std::string randomWord = wordManager.getRandomWord();
-                                randomWord += "\n";
-                                game->current_round += 1;
-                                informAllClients(game, randomWord);
+                                if(game->current_round == MAX_ROUNDS_COUNT){
+                                    informAllClients(game, "e\n");                                 
+                                }
+                                else{
+                                    informAllClients(game, "n\n");
 
-                                //sendChancesToAllClients(game, chances);
+                                    std::string randomWord = wordManager.getRandomWord();
+                                    randomWord += "\n";
+                                    game->current_round += 1;
+                                    informAllClients(game, randomWord);
+                                } 
+                             
                             } else if(msg == "+"){
                                 std::cout << sock_to_nickname_map[client_socket] << " guessed the letter" << std::endl; 
                                 ranking[sock_to_nickname_map[client_socket]] += 1;
-                                //informAllClients(game, "+\n");
-                                //sendChancesToAllClients(game, chances);
+                              
+                            
                             } else if(msg == "-"){
                                 std::cout << sock_to_nickname_map[client_socket] << "failed to guess the later " << std::endl; 
                                 chances[sock_to_nickname_map[client_socket]] -= 1;
@@ -254,14 +247,8 @@ void *gameServer(void *arg) {
                     }
                 }
             }
-            // sending ranking
-            std::string ranking_string = serializeMap(ranking);
-            informAllClients(game, ranking_string);
-
-            
         }  
     }
-
     return nullptr;
 }
 

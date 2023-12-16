@@ -15,6 +15,9 @@ from time import sleep
 # ok -> gracz przyjenty do gry
 # no -> gracz nieprzyjety do gry - pokoj pelny lub inny problem
 # s -> zaczela sie nowa gra
+# zaraz po s przychodza nicknames uzytkownikow
+# TO DO:
+# wyswietlanie nicknames i wisielcow
 
 # - -> info ze gracz o jakims id stracil szanse
 # nickname -> przychodzi po "-" info ktoremu graczowi odjec pkt
@@ -165,7 +168,8 @@ class ConnectionThread(QThread):
             message = f"{self.nick_name} {self.game_id}"
             self.client_socket.sendall(message.encode('utf-8'))
 
-            response = self.recv_serv_msg()
+            chunk = ""
+            response, chunk = self.split_serv_msg(chunk)
 
             if response == "ok":
                 print("Joined game.")
@@ -181,44 +185,54 @@ class ConnectionThread(QThread):
             print("Error connecting to server:", e)
 
 
-    def recv_serv_msg(self):
-        msg =""
-        while True:
+    def split_serv_msg(self, chunk):
+        msg = ""
+        if chunk == "":
             chunk = self.client_socket.recv(BUFFER_SIZE).decode('utf-8')
-            msg+= chunk
-            if '\n' in msg:
-                msg = msg.strip('\n')
-                break
-        print("fn gives: ", msg)
-        return msg
+            print("chunk:", chunk)
+
+        newline_pos = chunk.find('\n')
+        msg += chunk[:newline_pos]
+        print("msg after split: ", msg, "*")
+        if newline_pos != -1:
+            chunk = chunk[newline_pos+1:]
+        if newline_pos == -1:
+            chunk = ""
+    
+        return msg, chunk
+                
 
     
     def handle_server_updates(self):
+        chunk = ""
+        mess = ""
         while True:
-                mess = self.recv_serv_msg()
-                if mess == "s":
-                    players_nicknames = self.recv_serv_msg()
-                    print(players_nicknames)
-                    self.signal_game_start.emit(players_nicknames)
-                    self.mutex.lock()
+            mess, chunk = self.split_serv_msg(chunk)
 
-                elif mess == "n":
-                    secret_word = self.recv_serv_msg()
-                    print("secret word", secret_word)
-                    self.signal_round_start.emit(secret_word)
-                    # TO DO:
-                    # gamescreen sync
-                    
-                elif mess == "e":
-                    self.signal_game_end.emit()
-                elif mess == "-":
-                    player_nickname = self.recv_serv_msg()
-                    print(player_nickname)
-                    self.signal_update_hangman.emit(player_nickname)
-                    # TO DO:
-                    # GUI changes
-                else:
-                    print("Unexpected message from the server:", mess, " ", len(mess))
+            if mess == "s":
+                
+                players_nicknames, chunk = self.split_serv_msg(chunk)
+                print(players_nicknames)
+                self.signal_game_start.emit(players_nicknames)
+                self.mutex.lock()
+
+            elif mess == "n":
+                secret_word, chunk = self.split_serv_msg(chunk)
+                print("secret word", secret_word)
+                self.signal_round_start.emit(secret_word)
+                # TO DO:
+                # gamescreen sync
+                
+            elif mess == "e":
+                self.signal_game_end.emit()
+            elif mess == "-":
+                player_nickname, chunk = self.split_serv_msg(chunk)
+                print(player_nickname)
+                self.signal_update_hangman.emit(player_nickname)
+                # TO DO:
+                # GUI changes
+            else:
+                print("Unexpected message from the server:", mess, " ", len(mess))
 
 
 
