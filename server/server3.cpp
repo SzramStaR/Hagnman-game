@@ -37,6 +37,7 @@ struct GameInfo {
     pthread_t thread;
     std::queue<ClientInfo *> joinRequests; 
     std::vector<int> connectedClients; 
+
 };
 
 std::map<int, GameInfo *> activeGames;
@@ -67,32 +68,31 @@ void informAllClients(GameInfo *game, const std::string &message) {
     }
 }
 
-std::string readMsg(int socket_fd) {
+std::string readMsg(int client_socket) {
     char buffer[BUFFER_SIZE];
-
-    std::string received_data;
-    ssize_t bytes_received;
-
+    std::string msg;
+    
     while (true) {
-        bytes_received = read(socket_fd, buffer, sizeof(buffer));
+        ssize_t bytes_received = read(client_socket, buffer, sizeof(buffer));
 
         if (bytes_received <= 0) {
-            break;
+            close(client_socket);
+            return "";
         }
 
-        received_data.append(buffer, bytes_received);
-
-        size_t newline_pos = received_data.find('\n');
+        msg += std::string(buffer, bytes_received);
+        size_t newline_pos = msg.find('\n');
         if (newline_pos != std::string::npos) {
-
-            std::string message = received_data.substr(0, newline_pos);
-            received_data.erase(0, newline_pos + 1);
-            return message;
+            msg = msg.substr(0, newline_pos);
+            break;
         }
     }
 
-    return "";
-}
+    std::cout << "Function gives: " << msg << std::endl;
+    return msg;
+
+    }
+    
 
 void *gameServer(void *arg) {
     GameInfo *game = static_cast<GameInfo *>(arg);
@@ -108,6 +108,8 @@ void *gameServer(void *arg) {
 
    
     std::map<std::string, int> chances;
+
+    // mutex to reading msgs sequentionally
 
 
     // Game logic
@@ -183,24 +185,23 @@ void *gameServer(void *arg) {
                     if(client_socket > max_sd){
                         max_sd = client_socket;
                     }
-                }
-                
+                }     
             }
-            
-
-            
+                 
             
             while(game->current_round < MAX_ROUNDS_COUNT){
                 readfds_copy = readfds;
-                game -> current_round += 1;
-                if(game->current_round == 1){
+                if(game->current_round == 0){
                     
                     informAllClients(game, "n\n");
+
+                    game -> current_round += 1;   
 
                     std::string randomWord = wordManager.getRandomWord();
                     randomWord += "\n";
                     std::cout << "Random word: " << randomWord << std::endl;
                     informAllClients(game, randomWord);
+                    
                 }
                               
 
@@ -214,17 +215,20 @@ void *gameServer(void *arg) {
                             char buffer[BUFFER_SIZE];
                             // TO DO: 
                             // use read untill new line (readMsg - and add error handling)
-                            int valread = read(client_socket, buffer, sizeof(buffer));
-                            if (valread == 0) {
-                                std::cout<<sock_to_nickname_map[client_socket] << " disconnected" << std::endl;
-                                close(client_socket);
-                                return nullptr;
-                            }
+                            
+                            // int valread = read(client_socket, buffer, sizeof(buffer));
+                            // if (valread == 0) {
+                            //     std::cout<<sock_to_nickname_map[client_socket] << " disconnected" << std::endl;
+                            //     close(client_socket);
+                            //     return nullptr;
+                            // }
 
-                            buffer[valread] = '\0';
-                            std::string received_data(buffer);
-                            std::cout << "Received data:" << received_data << " from:  " << sock_to_nickname_map[client_socket] << std::endl;
-                            if(received_data == "w\n"){
+                            // buffer[valread] = '\0';
+                            // td::string received_data(buffer);
+
+                            std::string msg = readMsg(client_socket);
+                            std::cout << "Received data:" << msg << " from:  " << sock_to_nickname_map[client_socket] << std::endl;
+                            if(msg == "w\n"){
                                 std::cout << sock_to_nickname_map[client_socket] << " won the round" << std::endl; 
                                 ranking[sock_to_nickname_map[client_socket]] += 10;
                                 informAllClients(game, "n\n");
@@ -234,12 +238,12 @@ void *gameServer(void *arg) {
                                 informAllClients(game, randomWord);
 
                                 //sendChancesToAllClients(game, chances);
-                            } else if(received_data == "+\n"){
+                            } else if(msg == "+\n"){
                                 std::cout << sock_to_nickname_map[client_socket] << " guessed the letter" << std::endl; 
                                 ranking[sock_to_nickname_map[client_socket]] += 1;
                                 //informAllClients(game, "+\n");
                                 //sendChancesToAllClients(game, chances);
-                            } else if(received_data == "-\n"){
+                            } else if(msg == "-\n"){
                                 std::cout << sock_to_nickname_map[client_socket] << "failed to guess the later " << std::endl; 
                                 chances[sock_to_nickname_map[client_socket]] -= 1;
                                 informAllClients(game, "-\n");
@@ -277,13 +281,15 @@ void *handleClient(void *arg) {
     }
 
     buffer[valread] = '\0';
-    std::string received_data(buffer);
+    std::string msg(buffer);
 
-    size_t delimiter_pos = received_data.find(' ');
+    // std::string msg = readMsg(client_socket);
+
+    size_t delimiter_pos = msg.find(' ');
     if (delimiter_pos != std::string::npos) {
-        std::string nickname = received_data.substr(0, delimiter_pos);
+        std::string nickname = msg.substr(0, delimiter_pos);
         printf("Nickname: %s\n", nickname.c_str());
-        int game_id = atoi(received_data.substr(delimiter_pos + 1).c_str());
+        int game_id = atoi(msg.substr(delimiter_pos + 1).c_str());
         printf("Game id: %d\n", game_id);
 
         // Connect to game server or create if not exists

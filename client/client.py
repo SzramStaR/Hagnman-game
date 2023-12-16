@@ -69,6 +69,7 @@ class GameWindow(QWidget, Ui_GameScreen):
                 for word_letter, current_state_letter in zip(self.word_to_guess, self.current_word_state):
                     if word_letter == key:
                         new_word_state += key
+                        print("sending: +")
                         self.client_socket.sendall("+\n".encode('utf-8'))
                     else:
                         new_word_state += current_state_letter
@@ -77,11 +78,12 @@ class GameWindow(QWidget, Ui_GameScreen):
                 self.update_word_label()
 
                 if "_" not in self.current_word_state:
-                    
+                    print("sending: w")
                     self.client_socket.sendall("w\n".encode('utf-8'))
             else:
                 self.attempts_left_per_game -= 1
                 self.update_attempts_label()
+                print("sending: -")
                 self.client_socket.sendall("-\n".encode('utf-8'))
 
     
