@@ -74,7 +74,6 @@ std::string readMsg(int client_socket) {
     
     while (true) {
         ssize_t bytes_received = read(client_socket, buffer, sizeof(buffer));
-
         if (bytes_received <= 0) {
             close(client_socket);
             return "";
@@ -82,6 +81,7 @@ std::string readMsg(int client_socket) {
 
         msg += std::string(buffer, bytes_received);
         size_t newline_pos = msg.find('\n');
+        std::cout << newline_pos << std::endl;
         if (newline_pos != std::string::npos) {
             msg = msg.substr(0, newline_pos);
             break;
@@ -228,7 +228,7 @@ void *gameServer(void *arg) {
 
                             std::string msg = readMsg(client_socket);
                             std::cout << "Received data:" << msg << " from:  " << sock_to_nickname_map[client_socket] << std::endl;
-                            if(msg == "w\n"){
+                            if(msg == "w"){
                                 std::cout << sock_to_nickname_map[client_socket] << " won the round" << std::endl; 
                                 ranking[sock_to_nickname_map[client_socket]] += 10;
                                 informAllClients(game, "n\n");
@@ -238,12 +238,12 @@ void *gameServer(void *arg) {
                                 informAllClients(game, randomWord);
 
                                 //sendChancesToAllClients(game, chances);
-                            } else if(msg == "+\n"){
+                            } else if(msg == "+"){
                                 std::cout << sock_to_nickname_map[client_socket] << " guessed the letter" << std::endl; 
                                 ranking[sock_to_nickname_map[client_socket]] += 1;
                                 //informAllClients(game, "+\n");
                                 //sendChancesToAllClients(game, chances);
-                            } else if(msg == "-\n"){
+                            } else if(msg == "-"){
                                 std::cout << sock_to_nickname_map[client_socket] << "failed to guess the later " << std::endl; 
                                 chances[sock_to_nickname_map[client_socket]] -= 1;
                                 informAllClients(game, "-\n");
@@ -338,12 +338,13 @@ void *handleClient(void *arg) {
 
 
 int main() {
-   
+    int on = 1;
     int server_sockfd = socket(AF_INET, SOCK_STREAM, 0);
     if (server_sockfd == -1) {
         perror("socket error");
         exit(EXIT_FAILURE);
     }
+    setsockopt(server_sockfd, SOL_SOCKET, SO_REUSEADDR, (char*)&on, sizeof(on));
 
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
