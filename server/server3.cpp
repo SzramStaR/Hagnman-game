@@ -26,23 +26,23 @@ struct ClientInfo {
     int client_socket;
 };
 
-std::mutex mutex; // Declare a mutex
-std::condition_variable cv; // Declare a condition variable
-bool isGameThreadReady = false; // Variable to indicate whether the game thread is ready
+std::mutex mutex; 
+std::condition_variable cv; 
+bool isGameThreadReady = false;
 
 struct GameInfo {
     int id;
     int current_players_count;
     int current_round;
     pthread_t thread;
-    std::queue<ClientInfo *> joinRequests; // Queue for join requests
+    std::queue<ClientInfo *> joinRequests; 
     std::vector<int> connectedClients; 
 };
 
 std::map<int, GameInfo *> activeGames;
 std::map<int, ClientInfo *> clientInfoMap;
 
-//Przerabianie mapy na stringa
+
 template <typename K, typename V>
 std::string serializeMap(const std::map<K, V>& inputMap) {
     std::string result;
@@ -67,100 +67,142 @@ void informAllClients(GameInfo *game, const std::string &message) {
     }
 }
 
+std::string readMsg(int socket_fd) {
+    char buffer[BUFFER_SIZE];
+
+    std::string received_data;
+    ssize_t bytes_received;
+
+    while (true) {
+        bytes_received = read(socket_fd, buffer, sizeof(buffer));
+
+        if (bytes_received <= 0) {
+            break;
+        }
+
+        received_data.append(buffer, bytes_received);
+
+        size_t newline_pos = received_data.find('\n');
+        if (newline_pos != std::string::npos) {
+
+            std::string message = received_data.substr(0, newline_pos);
+            received_data.erase(0, newline_pos + 1);
+            return message;
+        }
+    }
+
+    return "";
+}
+
 void *gameServer(void *arg) {
     GameInfo *game = static_cast<GameInfo *>(arg);
 
     game->current_players_count = 0;
     game->current_round = 0;
 
-    //To store for priettier output or sth
+    // To store for priettier output
     std::map<int, std::string> sock_to_nickname_map;
 
-    //ranking
+    // ranking
     std::map<std::string, int> ranking;
 
-    //mapa szans dla graczy (eksperymentalnie jako pomysł, możesz zmienić na coś innego)
+   
     std::map<std::string, int> chances;
 
-    // Game logic goes here
+
+    // Game logic
     while (true) {
+        // for select
+        fd_set readfds, readfds_copy;
+        FD_ZERO(&readfds);
+        int max_sd = 0;
+        // for words generator
+        WordManager wordManager("words.txt");
+
+
+        if(game->current_round == 0){
+            // Check for join requests
+            if (!game->joinRequests.empty()) {
+                ClientInfo *joinRequest = game->joinRequests.front();
+                game->joinRequests.pop();
+
+                // Access the information about the client
+                int game_id = joinRequest->game_id;
+                std::string nickname = joinRequest->nickname;
+                int client_socket = joinRequest->client_socket;
+                sock_to_nickname_map[client_socket] = nickname;
+
+
+                printf("Processing join request: Game ID %d, Nickname %s, Client Socket %d\n", game_id, nickname.c_str(), client_socket);
+
+                if (game->current_players_count < MAX_PLAYER_COUNT) {
+                    std::string response = "ok\n"; 
+                    printf("Client can join\n");
+                    send(client_socket, response.c_str(), response.length(), 0);
+                    game->current_players_count += 1;
+                    game->connectedClients.push_back(client_socket);
+                    ranking[nickname] = 0;
+                    chances[nickname] = 6;
+                } else {
+                    std::string response = "no\n"; 
+                    printf("Client cannot join\n");
+                    send(client_socket, response.c_str(), response.length(), 0);
+                }
+                delete joinRequest;
+            }
+        }
         
 
-        // Check for join requests
-        if (!game->joinRequests.empty()) {
-            // Process the join request
-            ClientInfo *joinRequest = game->joinRequests.front();
-            game->joinRequests.pop();
-
-            // Access the information about the client
-            int game_id = joinRequest->game_id;
-            std::string nickname = joinRequest->nickname;
-            int client_socket = joinRequest->client_socket;
-            sock_to_nickname_map[client_socket] = nickname;
-
-            printf("Processing join request: Game ID %d, Nickname %s, Client Socket %d\n", game_id, nickname.c_str(), client_socket);
-
-            if (game->current_players_count < MAX_PLAYER_COUNT) {
-                std::string response = "ok\n"; // Modify as needed
-                printf("Client can join\n");
-                send(client_socket, response.c_str(), response.length(), 0);
-                game->current_players_count += 1;
-                game->connectedClients.push_back(client_socket);
-                ranking[nickname] = 0;
-                chances[nickname] = 6;
-            } else {
-                std::string response = "no\n"; // Modify as needed
-                printf("Client cannot join\n");
-                send(client_socket, response.c_str(), response.length(), 0);
-            }
-
-            // Clean up the ClientInfo instance
-            delete joinRequest;
-        }
-
         if (game->current_players_count == MAX_PLAYER_COUNT) {
-            // Notify the main thread that the game thread is ready
-            {
+            if(game->current_round == 0){
+                {
                 std::lock_guard<std::mutex> lock(mutex);
                 isGameThreadReady = true;
                 printf("Game ready\n");
+                }
+                cv.notify_one();
+                // Inform all clients that the game is starting
+                informAllClients(game, "s\n");
+                printf("Informed all clients about the start\n");
+
+                // get players nicknames
+                std::string nicknames;
+                for (const auto& entry : sock_to_nickname_map) {
+                    nicknames += entry.second + " ";
+                }
+                if (!nicknames.empty()) {
+                    nicknames.pop_back();
+                }
+                nicknames+="\n";
+                informAllClients(game, nicknames);
+
+                //select setup
+                for (int client_socket : game->connectedClients) {
+                    FD_SET(client_socket, &readfds);
+
+                    if(client_socket > max_sd){
+                        max_sd = client_socket;
+                    }
+                }
+                
             }
-            cv.notify_one();
             
 
-            // Inform all clients that the game is starting
-            informAllClients(game, "s\n");
-            printf("Informed all clients about the start\n");
-            WordManager wordManager("words.txt");
-
-            //select setup
-            fd_set readfds, readfds_copy;
-            FD_ZERO(&readfds);
-            int max_sd = 0;
-            for (int client_socket : game->connectedClients) {
-                FD_SET(client_socket, &readfds);
-                //So that it doesnt have to iterate over all the fdsize
-                if(client_socket > max_sd){
-                    max_sd = client_socket;
-                }
-            }
-
+            
             
             while(game->current_round < MAX_ROUNDS_COUNT){
-                //select is destructive so we need to copy it
                 readfds_copy = readfds;
                 game -> current_round += 1;
                 if(game->current_round == 1){
                     
                     informAllClients(game, "n\n");
+
                     std::string randomWord = wordManager.getRandomWord();
                     randomWord += "\n";
                     std::cout << "Random word: " << randomWord << std::endl;
-                    
                     informAllClients(game, randomWord);
                 }
-                
-
+                              
 
                 int clientActivity = select(max_sd + 1, &readfds_copy, NULL, NULL, NULL);
                 if(clientActivity < 0){
@@ -170,6 +212,8 @@ void *gameServer(void *arg) {
                     for (int client_socket : game->connectedClients) {
                         if(FD_ISSET(client_socket, &readfds_copy)){
                             char buffer[BUFFER_SIZE];
+                            // TO DO: 
+                            // use read untill new line (readMsg - and add error handling)
                             int valread = read(client_socket, buffer, sizeof(buffer));
                             if (valread == 0) {
                                 std::cout<<sock_to_nickname_map[client_socket] << " disconnected" << std::endl;
@@ -198,45 +242,15 @@ void *gameServer(void *arg) {
                             } else if(received_data == "-\n"){
                                 std::cout << sock_to_nickname_map[client_socket] << "failed to guess the later " << std::endl; 
                                 chances[sock_to_nickname_map[client_socket]] -= 1;
-                                //informAllClients(game, "-\n");
+                                informAllClients(game, "-\n");
+                                informAllClients(game, sock_to_nickname_map[client_socket]+"\n");
                                 //sendChancesToAllClients(game, chances); 
                             }
                         }
                     }
                 }
-
-
-                // TO DO:
-                // po wyslaniu server moglby czekac na jakies wiadomosci od klientow 
-                // (nwm czy w innym wontku czy tu )
-               
-                // jak przyslo 'w' - info ze klient wygral runde to wysyla 
-                // wszystkim 'n'- na ktore klienci zaczynaja nowa runde
-                // na w server powinien tez robic update rankingu
-                // jak przyszlo  + to update rankingu + 1 punkt dla gracza
-                // jak - to - 1 szansa dla gracza :
-                // trzeba wymyslic co ma server odeslac wszytskim klientom 
-                // żebby wiedzieli ktoremo graczowi podmienic fotke w ui czyli np (123, 3)
-                // ze gracz 123 ma juz 3 szanse tylko ze poki co klient w petli odbiera 
-               
-
-
-                // to sa fake rzeczy fake rozgrywka bo nic nie odbiera od klientow na razie
-                // sleep(10);
-                // std::string info = "n\n";
-                // informAllClients(game, info);
-                // randomWord = wordManager.getRandomWord();
-                // randomWord += "\n";
-                // std::cout << "Random word drugie : " << randomWord << std::endl;
-                // informAllClients(game, randomWord);
-
-                // sleep(30);
-                // info = "e\n";
-                // informAllClients(game, info);
-
             }
-
-            //Wysyłanie rankingu
+            // sending ranking
             std::string ranking_string = serializeMap(ranking);
             informAllClients(game, ranking_string);
 
@@ -253,6 +267,8 @@ void *handleClient(void *arg) {
     int client_socket = *(int *)arg;
 
     char buffer[BUFFER_SIZE];
+    // TO DO:
+    // use read untill new line (readMsg - and add error handling)
     int valread = read(client_socket, buffer, sizeof(buffer));
     if (valread == 0) {
         printf("Client not connected\n");
@@ -279,8 +295,7 @@ void *handleClient(void *arg) {
         } else {
             game = new GameInfo;
             game->id = game_id;
-            game->current_players_count = 0; // Initialize with 0, incremented as players join
-
+            game->current_players_count = 0; 
             activeGames[game_id] = game;
             
              printf("Active Games:\n");
@@ -290,14 +305,9 @@ void *handleClient(void *arg) {
             // Create a new thread for the game server
             if (pthread_create(&game->thread, nullptr, gameServer, (void *)game) != 0) {
                 perror("pthread_create error");
-                // Handle thread creation failure, cleanup, and exit if needed
+            
             }
 
-            // Wait for the game thread to be ready
-            // printf("Waiting for the game thread to be ready\n");
-            // std::unique_lock<std::mutex> lock(mutex);
-            // cv.wait(lock, [] { return isGameThreadReady; });
-            // printf("Now waiting\n");
         }
 
         // Store client info
@@ -308,7 +318,6 @@ void *handleClient(void *arg) {
         clientInfoMap[client_socket] = clientInfo;
         printf("Client info stored\n");
 
-        // Add the join request to the game thread's queue
         game->joinRequests.push(clientInfo);
         printf("Join request added to the queue\n");
 
@@ -332,7 +341,7 @@ int main() {
 
     struct sockaddr_in server_addr;
     server_addr.sin_family = AF_INET;
-    server_addr.sin_port = htons(2000); // Replace with your server port
+    server_addr.sin_port = htons(2000); 
     server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     if (bind(server_sockfd, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {
@@ -358,14 +367,14 @@ int main() {
 
         printf("New client connected\n");
 
-        // Create a new thread for each client
+        // new thread for each client
         pthread_t client_thread;
         if (pthread_create(&client_thread, nullptr, handleClient, (void *)client_socket) != 0) {
             perror("pthread_create error");
-            // Handle thread creation failure, cleanup, and exit if needed
+           
         }
 
-        // Detach the thread to clean up resources automatically
+ 
         pthread_detach(client_thread);
     }
 
