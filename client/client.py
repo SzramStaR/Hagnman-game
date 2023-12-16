@@ -1,10 +1,11 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QDialog, QWidget, QMessageBox
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QMutex, QMutexLocker, QEventLoop
 from PyQt5.QtCore import QTimer
 import socket
 import random
 from time import sleep
+
 # CO IDZIE DO SERVERA
 # + -> +1 punkt dla gracza
 # - -> -1 szansa
@@ -117,6 +118,8 @@ class GameWindow(QWidget, Ui_GameScreen):
 
     def update_hangman(self, nickname):
         print(nickname)
+        # TO DO:
+        # gui handling
 
     def handle_game_over(self, message):
         QMessageBox.information(self, "Game Over", message, QMessageBox.Ok)
@@ -127,14 +130,15 @@ class GameWindow(QWidget, Ui_GameScreen):
             self.total_score = 0
             self.attempts_left_per_game = 6
             # TO DO:
-            # wyczyścić pola do wpisania id gry i nickname w StartDialog
+            # clean nickname and gameid edit place in StartDialon
         else:
             self.close()
             startDialog.show()
 
+
+
 class ConnectionThread(QThread):
     signal_game_start = pyqtSignal(str)
-    # sygnal co wysyla slowo
     signal_round_start = pyqtSignal(str)
     signal_game_end = pyqtSignal()
     signal_update_hangman = pyqtSignal(str)
@@ -145,6 +149,10 @@ class ConnectionThread(QThread):
         self.nick_name = nick_name
         self.game_id = game_id
         self.client_socket = None
+        self.mutex = QMutex()
+        self.mutex.lock()
+
+
 
     def run(self):
         try:
@@ -167,9 +175,9 @@ class ConnectionThread(QThread):
             else:
                 print("Unexpected message from the server:", response)
 
-
         except Exception as e:
             print("Error connecting to server:", e)
+
 
     def recv_serv_msg(self):
         msg =""
@@ -184,28 +192,32 @@ class ConnectionThread(QThread):
 
     
     def handle_server_updates(self):
-        while(1):
-            mess = self.recv_serv_msg()
-            if mess == "s":
-                players_nicknames = self.recv_serv_msg()
-                print(players_nicknames)
-                self.signal_game_start.emit(players_nicknames)
+        while True:
+                mess = self.recv_serv_msg()
+                if mess == "s":
+                    players_nicknames = self.recv_serv_msg()
+                    print(players_nicknames)
+                    self.signal_game_start.emit(players_nicknames)
+                    self.mutex.lock()
 
-            elif mess == "n":
-                secret_word = self.recv_serv_msg()
-                print("secret word" ,secret_word)
-                self.signal_round_start.emit(secret_word)
-        
-            elif mess == "e":
-                self.signal_game_end.emit()
-            
-            elif mess == "-":
-                player_nickname = self.recv_serv_msg()
-                print(player_nickname)
-                self.signal_update_hangman.emit(player_nickname)
-                
-            else:
-                print("Unexpected message from the server:", mess, " ", len(mess))     
+                elif mess == "n":
+                    secret_word = self.recv_serv_msg()
+                    print("secret word", secret_word)
+                    self.signal_round_start.emit(secret_word)
+                    # TO DO:
+                    # gamescreen sync
+                    
+                elif mess == "e":
+                    self.signal_game_end.emit()
+                elif mess == "-":
+                    player_nickname = self.recv_serv_msg()
+                    print(player_nickname)
+                    self.signal_update_hangman.emit(player_nickname)
+                    # TO DO:
+                    # GUI changes
+                else:
+                    print("Unexpected message from the server:", mess, " ", len(mess))
+
 
 
 
@@ -238,7 +250,7 @@ class StartDialog(QDialog, Ui_StartDialog):
     def onCreateGameButtonClicked(self):
         nick_name = self.nickNameEdit.text()
         # TO DO:
-        # pobranie game_id wolnego z serwera przez conn thread
+        # getting free gameid from srv
 
 
 
@@ -247,7 +259,7 @@ class StartDialog(QDialog, Ui_StartDialog):
         self.game_window = GameWindow(self.connection_thread, self.connection_thread.client_socket, players_nicknames)
        
         self.game_window.connect_signals(self.connection_thread)  
-
+        self.connection_thread.mutex.unlock()
 
         self.game_window.activateWindow()
         self.game_window.raise_()
