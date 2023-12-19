@@ -14,11 +14,13 @@
 #include <fstream>
 #include "WordManager.cpp"
 #include <sys/select.h>
+#include <string>
 
 
 #define BUFFER_SIZE 1024
 #define MAX_PLAYER_COUNT 2
 #define MAX_ROUNDS_COUNT 5
+#define PLAYER_CHANCES 7
 
 struct ClientInfo {
     int game_id;
@@ -144,7 +146,7 @@ void *gameServer(void *arg) {
                     game->current_players_count += 1;
                     game->connectedClients.push_back(client_socket);
                     ranking[nickname] = 0;
-                    chances[nickname] = 6;
+                    chances[nickname] = PLAYER_CHANCES;
                 } else {
                     std::string response = "no\n"; 
                     printf("Client cannot join\n");
@@ -240,7 +242,10 @@ void *gameServer(void *arg) {
                                 std::cout << sock_to_nickname_map[client_socket] << "failed to guess the later " << std::endl; 
                                 chances[sock_to_nickname_map[client_socket]] -= 1;
                                 informAllClients(game, "-\n");
-                                informAllClients(game, sock_to_nickname_map[client_socket]+"\n");
+                                std::string client_nickname = sock_to_nickname_map[client_socket];
+                                std::string client_chances = std::to_string(chances[sock_to_nickname_map[client_socket]]);
+                                std::string msg_to_send = client_nickname + " " + client_chances  +"\n";
+                                informAllClients(game, msg_to_send);
                                 //sendChancesToAllClients(game, chances); 
                             }
                         }

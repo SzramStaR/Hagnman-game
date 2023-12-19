@@ -28,8 +28,8 @@ from time import sleep
 sys.path.append('/StartDialogUI.py')
 from StartDialogUI import Ui_StartDialog
 
-sys.path.append('/HangmanGameScreen.py')
-from HangmanGameScreen import Ui_GameScreen
+sys.path.append('/HangmanGameScreen2.py')
+from HangmanGameScreen2 import Ui_GameScreen
 
 BUFFER_SIZE = 1024
 
@@ -121,10 +121,16 @@ class GameWindow(QWidget, Ui_GameScreen):
         used_letters_text = "Used Letters: " + ", ".join(sorted(self.used_letters))
         self.usedLettersLabel.setText(used_letters_text)
 
-    def update_hangman(self, nickname):
+    def update_hangman(self, nickname, chances):
         print(nickname)
+        paths = [":/hangmans/hangman1.png",":/hangmans/hangman2.png",
+                 ":/hangmans/hangman3.png", ":/hangmans/hangman4.png",
+                 ":/hangmans/hangman5.png",":/hangmans/hangman6.png",
+                 ":/hangmans/hangman7.png", ":/hangmans/hangman8.png"]
         # TO DO:
-        # gui handling
+        # fix hangmans numeration
+        self.playerHangman1.setStyleSheet(f"image: url({paths[-chances-1]});") # to fix
+        
 
     def handle_game_over(self, message):
         QMessageBox.information(self, "Game Over", message, QMessageBox.Ok)
@@ -146,7 +152,7 @@ class ConnectionThread(QThread):
     signal_game_start = pyqtSignal(str)
     signal_round_start = pyqtSignal(str)
     signal_game_end = pyqtSignal()
-    signal_update_hangman = pyqtSignal(str)
+    signal_update_hangman = pyqtSignal(str, int)
     
 
     def __init__(self, nick_name, game_id):
@@ -226,9 +232,12 @@ class ConnectionThread(QThread):
             elif mess == "e":
                 self.signal_game_end.emit()
             elif mess == "-":
-                player_nickname, chunk = self.split_serv_msg(chunk)
+                player_info, chunk = self.split_serv_msg(chunk)
+                player_info = player_info.split()
+                player_nickname = player_info[0]
+                player_chances = player_info[1]     
                 print(player_nickname)
-                self.signal_update_hangman.emit(player_nickname)
+                self.signal_update_hangman.emit(player_nickname, int(player_chances))
                 # TO DO:
                 # GUI changes
             else:
