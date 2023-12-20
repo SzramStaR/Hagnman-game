@@ -10,20 +10,21 @@ from time import sleep
 # + -> +1 punkt dla gracza
 # - -> -1 szansa
 # w -> wygranie rundy +10 dla gracza
+# f -> przegranie gry - TODO
 
 # CO IDZIE DO GRACZA
 # ok -> gracz przyjenty do gry
 # no -> gracz nieprzyjety do gry - pokoj pelny lub inny problem
 # s -> zaczela sie nowa gra
 # zaraz po s przychodza nicknames uzytkownikow
-# TO DO:
-# wyswietlanie nicknames i wisielcow
+
 
 # - -> info ze gracz o jakims id stracil szanse
 # nickname -> przychodzi po "-" info ktoremu graczowi odjec pkt
 
 # n -> nowa runda (ktos wygral runde)
 # e -> koniec gry 
+
 
 sys.path.append('/StartDialogUI.py')
 from StartDialogUI import Ui_StartDialog
@@ -32,6 +33,11 @@ sys.path.append('/HangmanGameScreen2.py')
 from HangmanGameScreen2 import Ui_GameScreen
 
 BUFFER_SIZE = 1024
+
+# TODO:
+# changing number of players in game creating
+PLAYERS = 2
+MAX_PLAYERS = 5
 
 class GameWindow(QWidget, Ui_GameScreen):
     def __init__(self, connection_thread, client_socket, players_nicknames):
@@ -46,10 +52,13 @@ class GameWindow(QWidget, Ui_GameScreen):
         self.connection_thread = connection_thread
         self.client_socket = client_socket
         self.players_leaderboard = {}
+        self.players_in_gui = {}
 
         players_list = players_nicknames.strip().split()
         for nickname in players_list:
             self.players_leaderboard[nickname] = 0
+
+        self.set_players_info_gui(players_list)
      
 
     def connect_signals(self, connection_thread):
@@ -58,6 +67,25 @@ class GameWindow(QWidget, Ui_GameScreen):
   
             connection_thread.signal_game_end.connect(self.handle_game_over)
             connection_thread.signal_update_hangman.connect(self.update_hangman)
+    
+    def set_players_info_gui(self, players_nicknames):
+        nicknames_label = [self.playerNickname1, self.playerNickname2,
+                            self.playerNickname3, self.playerNickname4,
+                            self.playerNickname5]
+        hangmans_labels = [self.playerHangman1, self.playerHangman2,
+                            self.playerHangman3, self.playerHangman4,
+                            self.playerHangman5]
+                
+
+        for nickname_label, hangman_label, nickname in zip(nicknames_label[:PLAYERS], hangmans_labels[:PLAYERS], players_nicknames):
+            nickname_label.setText(nickname)
+            self.players_in_gui[nickname] = [nickname_label, hangman_label]
+
+        if PLAYERS < 5:
+            for nickname_label, hangman_label in zip(nicknames_label[PLAYERS:], hangmans_labels[PLAYERS:]):
+                nickname_label.setText("")
+                hangman_label.setStyleSheet("image: none;")
+
 
     def splitString(string):
         return string.strip().split()
@@ -92,6 +120,8 @@ class GameWindow(QWidget, Ui_GameScreen):
     
                 if self.attempts_left_per_game == 0:
                     self.handle_game_over("Game over! You ran out of attempts for the entire game")
+                    # TODO:
+                    # fail signal sending
 
         self.update_used_letters_label()
 
@@ -127,9 +157,11 @@ class GameWindow(QWidget, Ui_GameScreen):
                  ":/hangmans/hangman3.png", ":/hangmans/hangman4.png",
                  ":/hangmans/hangman5.png",":/hangmans/hangman6.png",
                  ":/hangmans/hangman7.png", ":/hangmans/hangman8.png"]
-        # TO DO:
-        # fix hangmans numeration
-        self.playerHangman1.setStyleSheet(f"image: url({paths[-chances-1]});") # to fix
+       
+        # self.players_in_gui[nickname][1] - player hangman label
+        # self.players_in_gui[nickname][0] - player nickname label
+        self.players_in_gui[nickname][1].setStyleSheet(f"image: url({paths[-chances-1]});")
+        #self.playerHangman1.setStyleSheet(f"image: url({paths[-chances-1]});") # to fix
         
 
     def handle_game_over(self, message):
@@ -140,7 +172,7 @@ class GameWindow(QWidget, Ui_GameScreen):
             self.round = 0
             self.total_score = 0
             self.attempts_left_per_game = 6
-            # TO DO:
+            # TODO:
             # clean nickname and gameid edit place in StartDialon
         else:
             self.close()
@@ -226,7 +258,7 @@ class ConnectionThread(QThread):
                 secret_word, chunk = self.split_serv_msg(chunk)
                 print("secret word", secret_word)
                 self.signal_round_start.emit(secret_word)
-                # TO DO:
+                # TODO:
                 # gamescreen sync
                 
             elif mess == "e":
@@ -238,8 +270,7 @@ class ConnectionThread(QThread):
                 player_chances = player_info[1]     
                 print(player_nickname)
                 self.signal_update_hangman.emit(player_nickname, int(player_chances))
-                # TO DO:
-                # GUI changes
+                
             else:
                 print("Unexpected message from the server:", mess, " ", len(mess))
 
@@ -274,7 +305,7 @@ class StartDialog(QDialog, Ui_StartDialog):
 
     def onCreateGameButtonClicked(self):
         nick_name = self.nickNameEdit.text()
-        # TO DO:
+        # TODO:
         # getting free gameid from srv
 
 

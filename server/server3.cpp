@@ -248,6 +248,9 @@ void *gameServer(void *arg) {
                                 informAllClients(game, msg_to_send);
                                 //sendChancesToAllClients(game, chances); 
                             }
+                            // TODO:
+                            // recv "f" msg from client and chcecking if more than 1 player still in game
+                            // sending win to winner
                         }
                     }
                 }
