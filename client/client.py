@@ -24,6 +24,7 @@ from time import sleep
 
 # n -> nowa runda (ktos wygral runde)
 # e -> koniec gry 
+# w -> klient wygral gre
 
 
 sys.path.append('/StartDialogUI.py')
@@ -45,7 +46,7 @@ class GameWindow(QWidget, Ui_GameScreen):
         self.setupUi(self)
         self.word_to_guess = ""
         self.current_word_state = ""
-        self.attempts_left_per_game = 6 
+        self.attempts_left_per_game = 7
         self.used_letters = set()
         self.round = 0
         self.total_score = 0
@@ -119,9 +120,11 @@ class GameWindow(QWidget, Ui_GameScreen):
 
     
                 if self.attempts_left_per_game == 0:
-                    self.handle_game_over("Game over! You ran out of attempts for the entire game")
+                    
                     # TODO:
                     # fail signal sending
+                    self.client_socket.sendall("f\n".encode('utf-8'))
+                    self.handle_game_over("Game over! You ran out of attempts for the entire game")
 
         self.update_used_letters_label()
 
@@ -157,26 +160,18 @@ class GameWindow(QWidget, Ui_GameScreen):
                  ":/hangmans/hangman3.png", ":/hangmans/hangman4.png",
                  ":/hangmans/hangman5.png",":/hangmans/hangman6.png",
                  ":/hangmans/hangman7.png", ":/hangmans/hangman8.png"]
-       
-        # self.players_in_gui[nickname][1] - player hangman label
-        # self.players_in_gui[nickname][0] - player nickname label
+    
         self.players_in_gui[nickname][1].setStyleSheet(f"image: url({paths[-chances-1]});")
-        #self.playerHangman1.setStyleSheet(f"image: url({paths[-chances-1]});") # to fix
-        
+
 
     def handle_game_over(self, message):
         QMessageBox.information(self, "Game Over", message, QMessageBox.Ok)
-
-        reply = QMessageBox.question(self, "Play Again?", "Do you want to play again?", QMessageBox.Yes | QMessageBox.No)
-        if reply == QMessageBox.Yes:
-            self.round = 0
-            self.total_score = 0
-            self.attempts_left_per_game = 6
-            # TODO:
-            # clean nickname and gameid edit place in StartDialon
-        else:
-            self.close()
-            startDialog.show()
+        self.round = 0
+        self.total_score = 0
+        self.attempts_left_per_game = 7
+        self.close()
+        startDialog.gameIdEdit.setText("")
+        startDialog.show()
 
 
 
@@ -258,11 +253,10 @@ class ConnectionThread(QThread):
                 secret_word, chunk = self.split_serv_msg(chunk)
                 print("secret word", secret_word)
                 self.signal_round_start.emit(secret_word)
-                # TODO:
-                # gamescreen sync
                 
             elif mess == "e":
                 self.signal_game_end.emit()
+
             elif mess == "-":
                 player_info, chunk = self.split_serv_msg(chunk)
                 player_info = player_info.split()
@@ -270,6 +264,9 @@ class ConnectionThread(QThread):
                 player_chances = player_info[1]     
                 print(player_nickname)
                 self.signal_update_hangman.emit(player_nickname, int(player_chances))
+            elif mess == "w":
+                print("you jusssssssst won enttttttttire gaaaaame!!!")
+                QMessageBox.information(self, "Game Over", "You win!", QMessageBox.Ok)# nie dzialaaaaaaaa
                 
             else:
                 print("Unexpected message from the server:", mess, " ", len(mess))

@@ -102,7 +102,7 @@ void *gameServer(void *arg) {
     game->current_players_count = 0;
     game->current_round = 0;
 
-    // To store for priettier output
+   // id, nickname map
     std::map<int, std::string> sock_to_nickname_map;
 
     // ranking
@@ -248,13 +248,25 @@ void *gameServer(void *arg) {
                                 informAllClients(game, msg_to_send);
                                 //sendChancesToAllClients(game, chances); 
                             }
-                            // TODO:
-                            // recv "f" msg from client and chcecking if more than 1 player still in game
-                            // sending win to winner
+
+                            else if(msg == "f"){
+                                std::cout << sock_to_nickname_map[client_socket] << "lost the game " << std::endl; 
+                                close(client_socket);
+                                sock_to_nickname_map.erase(client_socket);
+                                // TODO:
+                                // w kliencie sie dzieja chore rzeczy tu idkk czy to dobrze
+                                if (sock_to_nickname_map.size() == 1) {
+                                    int lastPlayerSocket = sock_to_nickname_map.rbegin()->first;
+                                    send(lastPlayerSocket, "w\n", 2, 0);
+                                }
+                                
+                            }
                         }
                     }
                 }
             }
+            // TODO:
+            // jesli skonczyly sie rundy a zostal wiecej niz jeden gracz to wysylany jest ranking i info "w " do graczaaaaaaaaaaa ktory wygral
         }  
     }
     return nullptr;
