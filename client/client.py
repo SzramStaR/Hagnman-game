@@ -124,7 +124,7 @@ class GameWindow(QWidget, Ui_GameScreen):
                     # TODO:
                     # fail signal sending
                     self.client_socket.sendall("f\n".encode('utf-8'))
-                    self.handle_game_over("Game over! You ran out of attempts for the entire game")
+                    self.handle_game_over("You ran out of attempts for the entire game")
 
         self.update_used_letters_label()
 
@@ -169,6 +169,7 @@ class GameWindow(QWidget, Ui_GameScreen):
         self.round = 0
         self.total_score = 0
         self.attempts_left_per_game = 7
+        self.connection_thread.close_connection()
         self.close()
         startDialog.gameIdEdit.setText("")
         startDialog.show()
@@ -178,7 +179,7 @@ class GameWindow(QWidget, Ui_GameScreen):
 class ConnectionThread(QThread):
     signal_game_start = pyqtSignal(str)
     signal_round_start = pyqtSignal(str)
-    signal_game_end = pyqtSignal()
+    signal_game_end = pyqtSignal(str)
     signal_update_hangman = pyqtSignal(str, int)
     
 
@@ -201,22 +202,30 @@ class ConnectionThread(QThread):
             message = f"{self.nick_name} {self.game_id}"
             self.client_socket.sendall(message.encode('utf-8'))
 
-            chunk = ""
-            response, chunk = self.split_serv_msg(chunk)
+            self.handle_server_updates() 
 
-            if response == "ok":
-                print("Joined game.")
-                self.handle_server_updates() 
+            # chunk = ""
+            # response, chunk = self.split_serv_msg(chunk)
 
-            elif response == "no":
-                print("Full room.")
+            # if response == "ok":
+            #     print("Joined game.")
+            #     self.handle_server_updates() 
 
-            else:
-                print("Unexpected message from the server:", response)
+            # elif response == "no":
+            #     print("Full room.")
+
+            # else:
+            #     print("Unexpected message from the server:", response)
 
         except Exception as e:
             print("Error connecting to server:", e)
 
+    def close_connection(self):
+        try:
+            if self.client_socket:
+                self.client_socket.close()
+        except Exception as e:
+            print("Error closing connection:", e)
 
     def split_serv_msg(self, chunk):
         msg = ""
@@ -241,8 +250,14 @@ class ConnectionThread(QThread):
         mess = ""
         while True:
             mess, chunk = self.split_serv_msg(chunk)
+            if mess == "ok":
+                print("Joined game.")
+                self.handle_server_updates() 
 
-            if mess == "s":
+            elif mess == "no":
+                QMessageBox.information(self, "You cannot join", "room is full!", QMessageBox.Ok)
+
+            elif mess == "s":
                 
                 players_nicknames, chunk = self.split_serv_msg(chunk)
                 print(players_nicknames)
@@ -255,7 +270,8 @@ class ConnectionThread(QThread):
                 self.signal_round_start.emit(secret_word)
                 
             elif mess == "e":
-                self.signal_game_end.emit()
+                self.signal_game_end.emit("Theres no more rounds to play!")
+
 
             elif mess == "-":
                 player_info, chunk = self.split_serv_msg(chunk)
@@ -267,7 +283,6 @@ class ConnectionThread(QThread):
             elif mess == "w":
                 print("you jusssssssst won enttttttttire gaaaaame!!!")
                 QMessageBox.information(self, "Game Over", "You win!", QMessageBox.Ok)# nie dzialaaaaaaaa
-                
             else:
                 print("Unexpected message from the server:", mess, " ", len(mess))
 
@@ -290,8 +305,16 @@ class StartDialog(QDialog, Ui_StartDialog):
     def onJoinGameButtonClicked(self):
         game_id = self.gameIdEdit.text()
         nick_name = self.nickNameEdit.text()
-        print("Clicked Join Game Button. Game ID:", game_id, "Nick Name:", nick_name)
-
+        if not game_id or not game_id.isdigit():
+            QMessageBox.warning(self, "Input Error", "Please enter a valid game ID (numeric).", QMessageBox.Ok)
+            return
+        if not nick_name:
+            QMessageBox.warning(self, "Input Error", "Please enter nickname.", QMessageBox.Ok)
+            return
+        elif " " in nick_name:
+            QMessageBox.warning(self, "Input Error", "Nickname cannot contain SPACES!.", QMessageBox.Ok)
+            return
+        
         try:
             self.connection_thread = ConnectionThread(nick_name, game_id)
             self.connection_thread.start()
