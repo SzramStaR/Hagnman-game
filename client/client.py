@@ -213,6 +213,7 @@ class ConnectionThread(QThread):
             self.client_socket.sendall(message.encode('utf-8'))
 
 
+
             self.handle_server_updates() 
 
             # chunk = ""
@@ -376,16 +377,18 @@ class CreateNewGameDialog(QDialog, Ui_CreateNewGameUI):
         self.startDialog = startDialog
 
     def onCreateGameButtonClicked(self):
-        print("dupa gra sie robi")
+
         try:
             self.hide()
             startDialog.connection_thread = ConnectionThread(self.nickname, 0)
+            # TODO: send  max rounds and players count to connthread
             startDialog.connection_thread.start()
             startDialog.connect_signals(startDialog.connection_thread)
             
         except Exception as e:
             QMessageBox.warning(self, "Connection Error", f"Error connecting to server: {e}", QMessageBox.Ok)
             startDialog.show()
+
 class WaitingRoomDialog(QDialog, Ui_Dialog):
     def __init__(self):
         super(WaitingRoomDialog, self).__init__()

@@ -241,8 +241,8 @@ void *gameServer(void *arg) {
                         if(FD_ISSET(client_socket, &readfds_copy)){
                             char buffer[BUFFER_SIZE];
 
-                            std::string msg;
-                            while(!(msg = readMsg(client_socket, parser)).empty()){  //so that it processes all the messages
+                            std::string msg = readMsg(client_socket, parser);
+                           // while(!(msg = readMsg(client_socket, parser)).empty()){  //so that it processes all the messages
                                 std::cout << "Received data:" << msg << " from:  " << sock_to_nickname_map[client_socket] << std::endl;
                                 if(msg == "w"){
                                     std::cout << sock_to_nickname_map[client_socket] << " won the round" << std::endl; 
@@ -288,7 +288,7 @@ void *gameServer(void *arg) {
                                     parser.buffer = "";
                                     
                                 }
-                            }
+                           // }
                             
                         }
                     }
