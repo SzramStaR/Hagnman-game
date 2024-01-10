@@ -68,6 +68,7 @@ class Ui_StartDialog(object):
 "\n"
 "\n"
 "}")
+
         self.createGameButton.setObjectName("createGameButton")
         self.widget = QtWidgets.QWidget(Dialog)
         self.widget.setGeometry(QtCore.QRect(230, 10, 481, 151))

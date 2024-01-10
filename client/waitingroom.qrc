@@ -1,0 +1,6 @@
+<RCC>
+  <qresource prefix="waitingImages">
+    <file>hangman8.png</file>
+    <file>waiting.png</file>
+  </qresource>
+</RCC>

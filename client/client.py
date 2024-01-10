@@ -33,6 +33,12 @@ from StartDialogUI import Ui_StartDialog
 sys.path.append('/HangmanGameScreen2.py')
 from HangmanGameScreen2 import Ui_GameScreen
 
+sys.path.append('/createNewGame.py')
+from createNewGame import Ui_CreateNewGameUI
+
+sys.path.append('/WaitingRoom.py')
+from WaitingRoom import Ui_Dialog
+
 BUFFER_SIZE = 1024
 
 # TODO:
@@ -195,12 +201,17 @@ class ConnectionThread(QThread):
 
     def run(self):
         try:
-            server_address = ('localhost', 2000)
+            server_address = ("192.168.122.1", 2000)
             self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.client_socket.connect(server_address)
 
-            message = f"{self.nick_name} {self.game_id}"
+            if self.game_id == 0:
+                self.game_id = 69
+                print("gameis is 69")
+
+            message = f"{self.nick_name} {self.game_id}" 
             self.client_socket.sendall(message.encode('utf-8'))
+
 
             self.handle_server_updates() 
 
@@ -250,15 +261,23 @@ class ConnectionThread(QThread):
         mess = ""
         while True:
             mess, chunk = self.split_serv_msg(chunk)
-            if mess == "ok":
+
+            # TODO przy create new game id=0 i wtedy serwer musi zwracac gameid jakie ma byc
+            if self.game_id == 0:
+                # TODO:
+                # self.game_id = mess - po zwroceniu wolnego game id przez srv
+                pass
+
+            elif mess == "ok":
                 print("Joined game.")
-                self.handle_server_updates() 
+                self.waitingRoomDialog = WaitingRoomDialog()
+                self.waitingRoomDialog.show()
 
             elif mess == "no":
                 QMessageBox.information(self, "You cannot join", "room is full!", QMessageBox.Ok)
 
             elif mess == "s":
-                
+                self.waitingRoomDialog.hide()
                 players_nicknames, chunk = self.split_serv_msg(chunk)
                 print(players_nicknames)
                 self.signal_game_start.emit(players_nicknames)
@@ -288,8 +307,6 @@ class ConnectionThread(QThread):
 
 
 
-
-
 class StartDialog(QDialog, Ui_StartDialog):
     def __init__(self):
         super(StartDialog, self).__init__()
@@ -316,17 +333,26 @@ class StartDialog(QDialog, Ui_StartDialog):
             return
         
         try:
+            self.hide()
             self.connection_thread = ConnectionThread(nick_name, game_id)
             self.connection_thread.start()
-            
             self.connect_signals(self.connection_thread)
         except Exception as e:
             QMessageBox.warning(self, "Connection Error", f"Error connecting to server: {e}", QMessageBox.Ok)
+            self.show()
 
     def onCreateGameButtonClicked(self):
         nick_name = self.nickNameEdit.text()
-        # TODO:
-        # getting free gameid from srv
+        if not nick_name:
+            QMessageBox.warning(self, "Input Error", "Please enter nickname.", QMessageBox.Ok)
+            return
+        else:
+            self.hide()
+            self.createNewGameDialog = CreateNewGameDialog(nick_name, self)
+            self.createNewGameDialog.activateWindow()
+            self.createNewGameDialog.raise_()
+            self.createNewGameDialog.show()
+
 
 
 
@@ -341,12 +367,36 @@ class StartDialog(QDialog, Ui_StartDialog):
         self.game_window.raise_()
         self.game_window.show()
 
-    
-   
+class CreateNewGameDialog(QDialog, Ui_CreateNewGameUI):
+    def __init__(self, nickname, startDialog):
+        super(CreateNewGameDialog, self).__init__()
+        self.setupUi(self)
+        self.createGameButton.clicked.connect(self.onCreateGameButtonClicked)
+        self.nickname = nickname
+        self.startDialog = startDialog
+
+    def onCreateGameButtonClicked(self):
+        print("dupa gra sie robi")
+        try:
+            self.hide()
+            startDialog.connection_thread = ConnectionThread(self.nickname, 0)
+            startDialog.connection_thread.start()
+            startDialog.connect_signals(startDialog.connection_thread)
+            
+        except Exception as e:
+            QMessageBox.warning(self, "Connection Error", f"Error connecting to server: {e}", QMessageBox.Ok)
+            startDialog.show()
+class WaitingRoomDialog(QDialog, Ui_Dialog):
+    def __init__(self):
+        super(WaitingRoomDialog, self).__init__()
+        self.setupUi(self)
+
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     
     startDialog = StartDialog()
     startDialog.show()
+
 
     sys.exit(app.exec_())
