@@ -40,6 +40,8 @@ sys.path.append('/WaitingRoom.py')
 from WaitingRoom import Ui_Dialog
 
 BUFFER_SIZE = 1024
+MAX_PLAYERS_COUNT = 5
+MAX_ROUNDS_COUNT = 5
 
 # TODO:
 # changing number of players in game creating
@@ -189,11 +191,13 @@ class ConnectionThread(QThread):
     signal_update_hangman = pyqtSignal(str, int)
     
 
-    def __init__(self, nick_name, game_id):
+    def __init__(self, nick_name, game_id, max_players_count=MAX_PLAYERS_COUNT, max_rounds_count=MAX_ROUNDS_COUNT):
         super(ConnectionThread, self).__init__()
         self.nick_name = nick_name
         self.game_id = game_id
         self.client_socket = None
+        self.max_rounds_count = max_rounds_count
+        self.max_players_count = max_players_count
         self.mutex = QMutex()
         self.mutex.lock()
 
@@ -205,10 +209,7 @@ class ConnectionThread(QThread):
             self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.client_socket.connect(server_address)
 
-            if self.game_id == 0:
-                self.game_id = 69
-                print("gameis is 69")
-
+    
             message = f"{self.nick_name} {self.game_id}" 
             self.client_socket.sendall(message.encode('utf-8'))
 
@@ -216,18 +217,6 @@ class ConnectionThread(QThread):
 
             self.handle_server_updates() 
 
-            # chunk = ""
-            # response, chunk = self.split_serv_msg(chunk)
-
-            # if response == "ok":
-            #     print("Joined game.")
-            #     self.handle_server_updates() 
-
-            # elif response == "no":
-            #     print("Full room.")
-
-            # else:
-            #     print("Unexpected message from the server:", response)
 
         except Exception as e:
             print("Error connecting to server:", e)
@@ -260,16 +249,18 @@ class ConnectionThread(QThread):
     def handle_server_updates(self):
         chunk = ""
         mess = ""
+        if self.game_id == 0:
+            new_game_id, chunk = self.split_serv_msg(chunk)
+            self.game_id = new_game_id 
+            message = f"{self.max_players_count} {self.max_rounds_count}" 
+            print(message)
+            self.client_socket.sendall(message.encode('utf-8'))
+            # TODO: odebranie na serwerze i wpisanie dla kazdej gry
+            
+
         while True:
             mess, chunk = self.split_serv_msg(chunk)
-
-            # TODO przy create new game id=0 i wtedy serwer musi zwracac gameid jakie ma byc
-            if self.game_id == 0:
-                # TODO:
-                # self.game_id = mess - po zwroceniu wolnego game id przez srv
-                pass
-
-            elif mess == "ok":
+            if mess == "ok":
                 print("Joined game.")
                 self.waitingRoomDialog = WaitingRoomDialog()
                 self.waitingRoomDialog.show()
@@ -354,9 +345,6 @@ class StartDialog(QDialog, Ui_StartDialog):
             self.createNewGameDialog.raise_()
             self.createNewGameDialog.show()
 
-
-
-
     def start_new_game(self, players_nicknames):
         self.hide()
         self.game_window = GameWindow(self.connection_thread, self.connection_thread.client_socket, players_nicknames)
@@ -379,8 +367,11 @@ class CreateNewGameDialog(QDialog, Ui_CreateNewGameUI):
     def onCreateGameButtonClicked(self):
 
         try:
+            max_players_count = self.maxPlayersCountBox.value()
+            max_rounds_count = self.maxRoundsCountBox.value()
+            print(max_players_count)
             self.hide()
-            startDialog.connection_thread = ConnectionThread(self.nickname, 0)
+            startDialog.connection_thread = ConnectionThread(self.nickname, 0, max_players_count, max_rounds_count)
             # TODO: send  max rounds and players count to connthread
             startDialog.connection_thread.start()
             startDialog.connect_signals(startDialog.connection_thread)
