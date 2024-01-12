@@ -137,10 +137,10 @@ class GameWindow(QWidget, Ui_GameScreen):
 
                     self.client_socket.sendall("f\n".encode('utf-8'))
                     # TODO: recv score
-                    score = self.connection_thread.recv(3).decode('utf-8')
-                    
+                    score = self.connection_thread.client_socket.recv(3).decode('utf-8')
                     print(score)
                     self.handle_game_over("You ran out of attempts for the entire game")
+            
 
         self.update_used_letters_label()
 
@@ -192,6 +192,7 @@ class GameWindow(QWidget, Ui_GameScreen):
             #TODO: display ranking
             self.close()
             ranking_dialog.show()
+
         self.round = 0
         self.total_score = 0
         self.attempts_left_per_game = 7
@@ -314,7 +315,12 @@ class ConnectionThread(QThread):
                 print("you jusssssssst won enttttttttire gaaaaame!!!")
                 score, chunk = self.split_serv_msg(chunk)
                 print(score)
-                self.signal_game_end("You won!!!")
+                score_dialog = ScoreuiDialog()
+                # TODO: display score
+                #self.close()
+                score_dialog.show()
+                #self.signal_game_end("You won!!!")
+                
             else:
                 print("Unexpected message from the server:", mess, " ", len(mess))
 

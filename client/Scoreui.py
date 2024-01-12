@@ -35,7 +35,6 @@ class Ui_Dialog(object):
         font = QtGui.QFont()
         font.setPointSize(15)
         self.scoreLabel.setFont(font)
-        self.scoreLabel.setStyleSheet("text-color:rgb(78, 78, 78)")
         self.scoreLabel.setObjectName("scoreLabel")
 
         self.retranslateUi(Dialog)
