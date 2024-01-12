@@ -19,7 +19,7 @@
 
 
 #define BUFFER_SIZE 1024
-#define MAX_PLAYER_COUNT 2
+#define MAX_PLAYERS_COUNT 2
 #define MAX_ROUNDS_COUNT 5
 #define PLAYER_CHANCES 7
 
@@ -38,6 +38,8 @@ struct GameInfo {
     int id;
     int current_players_count;
     int current_round;
+    int max_rounds_count;
+    int max_players_count;
     pthread_t thread;
     std::queue<ClientInfo *> joinRequests; 
     std::vector<int> connectedClients; 
@@ -66,6 +68,16 @@ std::string serializeMap(const std::map<K, V>& inputMap) {
     return result;
 }
 
+int getMaxGameIdValue() {
+    int maxId = 0;  
+
+    for (const auto& gamePair : activeGames) {
+        int currentId = gamePair.second->id;
+        maxId = std::max(maxId, currentId);
+    }
+
+    return maxId;
+}
 
 void sendChancesToAllClients(GameInfo *game, const std::map<std::string, int> &chances) {
     std::string serialized_chances = serializeMap(chances);
@@ -175,7 +187,7 @@ void *gameServer(void *arg) {
 
                 printf("Processing join request: Game ID %d, Nickname %s, Client Socket %d\n", game_id, nickname.c_str(), client_socket);
 
-                if (game->current_players_count < MAX_PLAYER_COUNT) {
+                if (game->current_players_count < game->max_players_count) {
                     std::string response = "ok\n"; 
                     printf("Client can join\n");
                     send(client_socket, response.c_str(), response.length(), 0);
@@ -193,7 +205,7 @@ void *gameServer(void *arg) {
         }
         
 
-        if (game->current_players_count == MAX_PLAYER_COUNT) {
+        if (game->current_players_count == game->max_players_count) {
             if(game->current_round == 0){
                 {
                 std::lock_guard<std::mutex> lock(mutex);
@@ -240,7 +252,7 @@ void *gameServer(void *arg) {
                     informAllClients(game, randomWord);
                     
                 }         
-            while(game->current_round <= MAX_ROUNDS_COUNT && game->current_players_count > 0){
+            while(game->current_round <= game->max_rounds_count && game->current_players_count > 0){
                 readfds_copy = readfds;
                 int clientActivity = select(max_sd + 1, &readfds_copy, NULL, NULL, NULL);
                 if(clientActivity < 0){
@@ -272,7 +284,7 @@ void *gameServer(void *arg) {
                                     std::cout << sock_to_nickname_map[client_socket] << " won the round" << std::endl; 
                                     ranking[sock_to_nickname_map[client_socket]] += 10;
                                     parser.buffer = "";
-                                    if(game->current_round == MAX_ROUNDS_COUNT){
+                                    if(game->current_round == game->max_rounds_count){
                                         informAllClients(game, "e\n");     
                                         game->roundAlreadyWon = false;                            
                                     }
@@ -342,11 +354,12 @@ void *gameServer(void *arg) {
 
 
 void *handleClient(void *arg) {
+    int max_players_count = MAX_PLAYERS_COUNT;
+    int max_rounds_count = MAX_ROUNDS_COUNT;
+
     int client_socket = *(int *)arg;
 
     char buffer[BUFFER_SIZE];
-    // TO DO:
-    // use read untill new line (readMsg - and add error handling)
     int valread = read(client_socket, buffer, sizeof(buffer));
     if (valread == 0) {
         printf("Client not connected\n");
@@ -368,6 +381,37 @@ void *handleClient(void *arg) {
         // Connect to game server or create if not exists
         mutex.lock();
         GameInfo *game = nullptr;
+        
+        if(game_id == 0){
+            int new_game_id = getMaxGameIdValue() + 1;
+            game_id = new_game_id;
+            std::string message = std::to_string(new_game_id) + "\n";
+            ssize_t send_result = send(client_socket, message.c_str(), message.length(), 0);
+            if (send_result == -1) {
+                perror("Error sending data");
+                close(client_socket);
+                mutex.unlock();
+                return nullptr;
+            }
+            
+            int valread = read(client_socket, buffer, sizeof(buffer));
+            if (valread == 0) {
+                printf("Client not connected\n");
+                close(client_socket);
+                return nullptr;
+            }
+            buffer[valread] = '\0';
+            std::string msg(buffer);
+
+            size_t delimiter_pos = msg.find(' ');
+            if (delimiter_pos != std::string::npos) {
+                max_players_count = atoi(msg.substr(0, delimiter_pos).c_str());
+                printf("max players: %d\n", max_players_count);
+                max_rounds_count = atoi(msg.substr(delimiter_pos + 1).c_str());
+            }
+
+        }
+
         if (activeGames.find(game_id) != activeGames.end()) {
             game = activeGames[game_id];
             printf("there is a game");
@@ -375,6 +419,8 @@ void *handleClient(void *arg) {
             game = new GameInfo;
             game->id = game_id;
             game->current_players_count = 0; 
+            game->max_players_count = max_players_count;
+            game->max_rounds_count = max_rounds_count;
             activeGames[game_id] = game;
             
             printf("Active Games:\n");
