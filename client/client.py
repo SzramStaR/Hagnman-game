@@ -30,14 +30,20 @@ from time import sleep
 sys.path.append('/StartDialogUI.py')
 from StartDialogUI import Ui_StartDialog
 
-sys.path.append('/HangmanGameScreen2.py')
-from HangmanGameScreen2 import Ui_GameScreen
+sys.path.append('/HangmanGameScreen.py')
+from HangmanGameScreen import Ui_GameScreen
 
 sys.path.append('/createNewGame.py')
 from createNewGame import Ui_CreateNewGameUI
 
 sys.path.append('/WaitingRoom.py')
-from WaitingRoom import Ui_Dialog
+from WaitingRoom import UI_WaitingRoom
+
+sys.path.append('/Scoreui.py')
+from Scoreui import Ui_Dialog
+
+sys.path.append('/Ranking.py')
+from Ranking import Ui_Score
 
 BUFFER_SIZE = 1024
 MAX_PLAYERS_COUNT = 5
@@ -90,7 +96,7 @@ class GameWindow(QWidget, Ui_GameScreen):
             nickname_label.setText(nickname)
             self.players_in_gui[nickname] = [nickname_label, hangman_label]
 
-        if PLAYERS < 5:
+        if PLAYERS < MAX_PLAYERS_COUNT:
             for nickname_label, hangman_label in zip(nicknames_label[PLAYERS:], hangmans_labels[PLAYERS:]):
                 nickname_label.setText("")
                 hangman_label.setStyleSheet("image: none;")
@@ -128,10 +134,12 @@ class GameWindow(QWidget, Ui_GameScreen):
 
     
                 if self.attempts_left_per_game == 0:
-                    
-                    # TODO:
-                    # fail signal sending
+
                     self.client_socket.sendall("f\n".encode('utf-8'))
+                    # TODO: recv score
+                    score = self.connection_thread.recv(3).decode('utf-8')
+                    
+                    print(score)
                     self.handle_game_over("You ran out of attempts for the entire game")
 
         self.update_used_letters_label()
@@ -156,10 +164,10 @@ class GameWindow(QWidget, Ui_GameScreen):
         self.wordLabel.setText(" ".join(self.current_word_state))
 
     def update_attempts_label(self):
-        self.attemptsLabel.setText(f"Attempts left: {self.attempts_left_per_game}")
+        self.attemptsLabel.setText(f"{self.attempts_left_per_game}")
 
     def update_used_letters_label(self):
-        used_letters_text = "Used Letters: " + ", ".join(sorted(self.used_letters))
+        used_letters_text = ", ".join(sorted(self.used_letters))
         self.usedLettersLabel.setText(used_letters_text)
 
     def update_hangman(self, nickname, chances):
@@ -174,18 +182,27 @@ class GameWindow(QWidget, Ui_GameScreen):
 
     def handle_game_over(self, message):
         QMessageBox.information(self, "Game Over", message, QMessageBox.Ok)
+        if message == "You ran out of attempts for the entire game" or message == "You won!!!":
+            score_dialog = ScoreuiDialog()
+            # TODO: display score
+            self.close()
+            score_dialog.show()
+        else:
+            ranking_dialog = RankingDialog()
+            #TODO: display ranking
+            self.close()
+            ranking_dialog.show()
         self.round = 0
         self.total_score = 0
         self.attempts_left_per_game = 7
         self.connection_thread.close_connection()
-        self.close()
         startDialog.gameIdEdit.setText("")
         startDialog.show()
 
 
 
 class ConnectionThread(QThread):
-    signal_game_start = pyqtSignal(str)
+    signal_game_start = pyqtSignal(str, str)
     signal_round_start = pyqtSignal(str)
     signal_game_end = pyqtSignal(str)
     signal_update_hangman = pyqtSignal(str, int)
@@ -255,14 +272,14 @@ class ConnectionThread(QThread):
             message = f"{self.max_players_count} {self.max_rounds_count}" 
             print(message)
             self.client_socket.sendall(message.encode('utf-8'))
-            # TODO: odebranie na serwerze i wpisanie dla kazdej gry
-            
+
 
         while True:
             mess, chunk = self.split_serv_msg(chunk)
             if mess == "ok":
                 print("Joined game.")
                 self.waitingRoomDialog = WaitingRoomDialog()
+                self.waitingRoomDialog.gameIDLabel.setText(self.game_id)
                 self.waitingRoomDialog.show()
 
             elif mess == "no":
@@ -272,7 +289,7 @@ class ConnectionThread(QThread):
                 self.waitingRoomDialog.hide()
                 players_nicknames, chunk = self.split_serv_msg(chunk)
                 print(players_nicknames)
-                self.signal_game_start.emit(players_nicknames)
+                self.signal_game_start.emit(players_nicknames, self.game_id)
                 self.mutex.lock()
 
             elif mess == "n":
@@ -281,6 +298,8 @@ class ConnectionThread(QThread):
                 self.signal_round_start.emit(secret_word)
                 
             elif mess == "e":
+                rank= self.client_socket.recv(BUFFER_SIZE).decode('utf-8')
+                print(rank)
                 self.signal_game_end.emit("Theres no more rounds to play!")
 
 
@@ -293,7 +312,9 @@ class ConnectionThread(QThread):
                 self.signal_update_hangman.emit(player_nickname, int(player_chances))
             elif mess == "w":
                 print("you jusssssssst won enttttttttire gaaaaame!!!")
-                QMessageBox.information(self, "Game Over", "You win!", QMessageBox.Ok)# nie dzialaaaaaaaa
+                score, chunk = self.split_serv_msg(chunk)
+                print(score)
+                self.signal_game_end("You won!!!")
             else:
                 print("Unexpected message from the server:", mess, " ", len(mess))
 
@@ -345,13 +366,13 @@ class StartDialog(QDialog, Ui_StartDialog):
             self.createNewGameDialog.raise_()
             self.createNewGameDialog.show()
 
-    def start_new_game(self, players_nicknames):
+    def start_new_game(self, players_nicknames, game_id):
         self.hide()
         self.game_window = GameWindow(self.connection_thread, self.connection_thread.client_socket, players_nicknames)
        
         self.game_window.connect_signals(self.connection_thread)  
         self.connection_thread.mutex.unlock()
-
+        self.game_window.GameIDlabel.setText(game_id)
         self.game_window.activateWindow()
         self.game_window.raise_()
         self.game_window.show()
@@ -372,7 +393,6 @@ class CreateNewGameDialog(QDialog, Ui_CreateNewGameUI):
             print(max_players_count)
             self.hide()
             startDialog.connection_thread = ConnectionThread(self.nickname, 0, max_players_count, max_rounds_count)
-            # TODO: send  max rounds and players count to connthread
             startDialog.connection_thread.start()
             startDialog.connect_signals(startDialog.connection_thread)
             
@@ -380,11 +400,19 @@ class CreateNewGameDialog(QDialog, Ui_CreateNewGameUI):
             QMessageBox.warning(self, "Connection Error", f"Error connecting to server: {e}", QMessageBox.Ok)
             startDialog.show()
 
-class WaitingRoomDialog(QDialog, Ui_Dialog):
+class WaitingRoomDialog(QDialog, UI_WaitingRoom):
     def __init__(self):
         super(WaitingRoomDialog, self).__init__()
         self.setupUi(self)
 
+class ScoreuiDialog(QDialog, Ui_Dialog):
+    def __init__(self):
+        super(ScoreuiDialog, self).__init__()
+        self.setupUi(self)
+class RankingDialog(QDialog, Ui_Score):
+    def __init__(self):
+        super(RankingDialog, self).__init__()
+        self.setupUi(self)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

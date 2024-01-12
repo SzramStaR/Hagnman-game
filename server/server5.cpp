@@ -264,6 +264,13 @@ void *gameServer(void *arg) {
                         if(FD_ISSET(client_socket, &readfds_copy)){
                             char buffer[BUFFER_SIZE];
 
+                                if (game->current_players_count == 1) {
+                                        int lastPlayerSocket = sock_to_nickname_map.rbegin()->first;
+                                        printf("Last player nickname: %s\n", sock_to_nickname_map.rbegin()->second.c_str());
+                                        send(lastPlayerSocket, "w\n", 2, 0);
+                                        send(lastPlayerSocket, "10\n", 3, 0); //TODO: CHANGE TO SCORE
+                                    }
+
                                 std::string msg = readMsg(client_socket, parser);
                                 if (msg.empty()) {
                                     printf("Client %s disconnected\n", sock_to_nickname_map[client_socket].c_str());
@@ -312,20 +319,25 @@ void *gameServer(void *arg) {
                                     //sendChancesToAllClients(game, chances); 
                                     parser.buffer = "";
                                 }
-
                                 else if(msg == "f"){
-                                    std::cout << sock_to_nickname_map[client_socket] << "lost the game " << std::endl; 
+                                    std::cout << sock_to_nickname_map[client_socket] << " lost the game " << std::endl; 
+                                    send(client_socket,"10\n",3,0); //TODO: CHANGE TO SCORE
                                     close(client_socket);
                                     sock_to_nickname_map.erase(client_socket);
-                                    // TODO:
-                                    // w kliencie sie dzieja chore rzeczy tu idkk czy to dobrze
-                                    if (sock_to_nickname_map.size() == 1) {
-                                        int lastPlayerSocket = sock_to_nickname_map.rbegin()->first;
-                                        send(lastPlayerSocket, "w\n", 2, 0);
-                                    }
+                                    game->current_players_count -= 1;
+                                    disconnectedClients.push_back(client_socket);
+                                    FD_CLR(client_socket, &readfds);
+                                    
                                     parser.buffer = "";
+                                    if (game->current_players_count == 1) {
+                                            int lastPlayerSocket = sock_to_nickname_map.rbegin()->first;
+                                            printf("Last player nickname: %s\n", sock_to_nickname_map.rbegin()->second.c_str());
+                                            send(lastPlayerSocket, "w\n", 2, 0);
+                                            send(lastPlayerSocket, "10\n", 3, 0); //TODO: CHANGE TO SCORE
+                                        }
                                     
                                 }
+                                
                             
                             
                         }
@@ -335,11 +347,15 @@ void *gameServer(void *arg) {
                     }
                 }
             }
-            // TODO:
-            // jesli skonczyly sie rundy a zostal wiecej niz jeden gracz to wysylany jest ranking i info "w " do graczaaaaaaaaaaa ktory wygral
-            //game over logic
-            //Cleaning
+            
             std::lock_guard<std::mutex> lock(game->gameEndLock);
+            for(std::map<std::string, int>::iterator it = ranking.begin(); it != ranking.end(); ++it){
+                std::string client_nickname = it->first;
+                std::string client_score = std::to_string(it->second);
+                std::string msg_to_send = client_nickname + " " + client_score + "\n";
+                printf("Ranking: %s\n", msg_to_send.c_str());
+                informAllClients(game, msg_to_send);
+            }
             printf("Game %d closing...\n", game->id);
             activeGames.erase(game->id);
             for(auto& socket:game->connectedClients){ 

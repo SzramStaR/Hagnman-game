@@ -11,7 +11,7 @@
 from PyQt5 import QtCore, QtGui, QtWidgets
 
 
-class Ui_Dialog(object):
+class UI_WaitingRoom(object):
     def setupUi(self, Dialog):
         Dialog.setObjectName("Dialog")
         Dialog.resize(412, 310)
@@ -25,6 +25,19 @@ class Ui_Dialog(object):
         self.waitingHangmansLabel.setStyleSheet("background-image: url(:/waitingImages/hangman8.png)")
         self.waitingHangmansLabel.setText("")
         self.waitingHangmansLabel.setObjectName("waitingHangmansLabel")
+        self.gameID = QtWidgets.QLabel(Dialog)
+        self.gameID.setGeometry(QtCore.QRect(70, 250, 141, 51))
+        self.gameID.setStyleSheet("image: url(:/waitingImages/game_id.png)")
+        self.gameID.setText("")
+        self.gameID.setObjectName("gameID")
+        self.gameIDLabel = QtWidgets.QLabel(Dialog)
+        self.gameIDLabel.setGeometry(QtCore.QRect(240, 250, 81, 51))
+        font = QtGui.QFont()
+        font.setPointSize(25)
+        font.setBold(True)
+        font.setWeight(75)
+        self.gameIDLabel.setFont(font)
+        self.gameIDLabel.setObjectName("gameIDLabel")
 
         self.retranslateUi(Dialog)
         QtCore.QMetaObject.connectSlotsByName(Dialog)
@@ -32,4 +45,5 @@ class Ui_Dialog(object):
     def retranslateUi(self, Dialog):
         _translate = QtCore.QCoreApplication.translate
         Dialog.setWindowTitle(_translate("Dialog", "Waiting"))
+        self.gameIDLabel.setText(_translate("Dialog", "1"))
 import waitingroom_rc

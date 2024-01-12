@@ -1,0 +1,14 @@
+<RCC>
+  <qresource prefix="numbers">
+    <file>3.png</file>
+    <file>4.png</file>
+    <file>5.png</file>
+    <file>1.png</file>
+    <file>2.png</file>
+  </qresource>
+  <qresource prefix="text">
+    <file>game_over.png</file>
+    <file>score.png</file>
+    <file>ranking.png</file>
+  </qresource>
+</RCC>

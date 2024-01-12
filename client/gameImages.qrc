@@ -12,4 +12,9 @@
   <qresource prefix="background">
     <file>gameBackground.png</file>
   </qresource>
+  <qresource prefix="text_jpg">
+    <file>used_letters.png</file>
+    <file>game_id.png</file>
+    <file>attempts_left.png</file>
+  </qresource>
 </RCC>
