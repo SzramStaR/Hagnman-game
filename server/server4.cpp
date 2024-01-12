@@ -45,8 +45,10 @@ struct GameInfo {
     std::mutex gameLock;
     std::mutex gameStartLock;
     std::mutex gameEndLock;
+    std::mutex roundLock;
     bool gameBool = false;
     bool isGameReady = false;
+    bool roundAlreadyWon = false;
 
 };
 
@@ -73,8 +75,23 @@ void sendChancesToAllClients(GameInfo *game, const std::map<std::string, int> &c
 
 
 void informAllClients(GameInfo *game, const std::string &message) {
-    for (int client_socket : game->connectedClients) {
-        send(client_socket, message.c_str(), message.length(), 0);
+    // for (int client_socket : game->connectedClients) {
+    //     int check = send(client_socket, message.c_str(), message.length(), 0);
+    //     if (check == -1) {
+    //         perror("send error");
+    //         disconnectedClients.push_back(client_socket);
+    //     }
+    // }
+    for(auto it = game->connectedClients.begin(); it != game->connectedClients.end();){
+        int client_socket = *it;
+        int check = send(*it, message.c_str(), message.length(), 0);
+        if (check == -1) {
+            printf("Client disconnected\n");
+            it = game->connectedClients.erase(it);
+        } else {
+            ++it;
+        }
+
     }
 }
 
@@ -104,7 +121,6 @@ std::string readMsg(int client_socket, MessageParser& parser) {
     ssize_t bytes_received = read(client_socket, buffer, sizeof(buffer));
     if (bytes_received <= 0) {
         close(client_socket);
-        activeGames.erase(client_socket);
         return "";
     }
 
@@ -235,21 +251,26 @@ void *gameServer(void *arg) {
                 int clientActivity = select(max_sd + 1, &readfds_copy, NULL, NULL, NULL);
                 if(clientActivity < 0){
                     perror("select error");
-                    exit(EXIT_FAILURE);
+                    
                 } else if(clientActivity > 0){
                     for (int client_socket : game->connectedClients) {
                         if(FD_ISSET(client_socket, &readfds_copy)){
                             char buffer[BUFFER_SIZE];
 
                             std::string msg = readMsg(client_socket, parser);
-                           // while(!(msg = readMsg(client_socket, parser)).empty()){  //so that it processes all the messages
                                 std::cout << "Received data:" << msg << " from:  " << sock_to_nickname_map[client_socket] << std::endl;
                                 if(msg == "w"){
+                                    std::lock_guard<std::mutex> lock(game->roundLock);
+                                    if(game->roundAlreadyWon){
+                                        continue;
+                                    }
+                                    game->roundAlreadyWon = true;
                                     std::cout << sock_to_nickname_map[client_socket] << " won the round" << std::endl; 
                                     ranking[sock_to_nickname_map[client_socket]] += 10;
                                     parser.buffer = "";
                                     if(game->current_round == MAX_ROUNDS_COUNT){
-                                        informAllClients(game, "e\n");                                 
+                                        informAllClients(game, "e\n");     
+                                        game->roundAlreadyWon = false;                            
                                     }
                                     else{
                                         informAllClients(game, "n\n");
@@ -258,6 +279,7 @@ void *gameServer(void *arg) {
                                         randomWord += "\n";
                                         game->current_round += 1;
                                         informAllClients(game, randomWord);
+                                        game->roundAlreadyWon = false;
                                     }                            
                                 } else if(msg == "+"){
                                     std::cout << sock_to_nickname_map[client_socket] << " guessed the letter" << std::endl; 
@@ -288,7 +310,7 @@ void *gameServer(void *arg) {
                                     parser.buffer = "";
                                     
                                 }
-                           // }
+                            
                             
                         }
                     }
