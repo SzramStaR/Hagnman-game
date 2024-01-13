@@ -347,13 +347,15 @@ void *gameServer(void *arg) {
             }
             
             std::lock_guard<std::mutex> lock(game->gameEndLock);
+            std::string ranking_to_send = "";
             for(std::map<std::string, int>::iterator it = ranking.begin(); it != ranking.end(); ++it){
                 std::string client_nickname = it->first;
                 std::string client_score = std::to_string(it->second);
-                std::string msg_to_send = client_nickname + " " + client_score + "\n";
-                printf("Ranking: %s\n", msg_to_send.c_str());
-                informAllClients(game, msg_to_send);
+                ranking_to_send += client_nickname + " " + client_score + " ";
+                                
             }
+            ranking_to_send += "\n";
+            informAllClients(game, ranking_to_send);
             printf("Game %d closing...\n", game->id);
             activeGames.erase(game->id);
             for(auto& socket:game->connectedClients){ 
