@@ -16,7 +16,9 @@ class Ui_CreateNewGameUI(object):
         CreateNewGameUI.setObjectName("CreateNewGameUI")
         CreateNewGameUI.resize(400, 300)
         CreateNewGameUI.setStyleSheet("QDialog{\n"
-"background-color:rgb(250, 250, 250)\n"
+"background-color:rgb(250, 250, 250);\n"
+"background-image:url(:/text/create_game.png)\n"
+"\n"
 "}")
         self.createGameButton = QtWidgets.QPushButton(CreateNewGameUI)
         self.createGameButton.setGeometry(QtCore.QRect(150, 230, 91, 51))
@@ -40,6 +42,16 @@ class Ui_CreateNewGameUI(object):
         self.maxRoundsCountBox.setMinimum(2)
         self.maxRoundsCountBox.setMaximum(5)
         self.maxRoundsCountBox.setObjectName("maxRoundsCountBox")
+        self.maxRounds = QtWidgets.QLabel(CreateNewGameUI)
+        self.maxRounds.setGeometry(QtCore.QRect(40, 120, 221, 91))
+        self.maxRounds.setStyleSheet("image: url(:/text/max_rounds.png)")
+        self.maxRounds.setText("")
+        self.maxRounds.setObjectName("maxRounds")
+        self.maxPlayers = QtWidgets.QLabel(CreateNewGameUI)
+        self.maxPlayers.setGeometry(QtCore.QRect(40, 60, 231, 81))
+        self.maxPlayers.setStyleSheet("image: url(:/text/max_players.png)")
+        self.maxPlayers.setText("")
+        self.maxPlayers.setObjectName("maxPlayers")
 
         self.retranslateUi(CreateNewGameUI)
         QtCore.QMetaObject.connectSlotsByName(CreateNewGameUI)
@@ -48,3 +60,4 @@ class Ui_CreateNewGameUI(object):
         _translate = QtCore.QCoreApplication.translate
         CreateNewGameUI.setWindowTitle(_translate("CreateNewGameUI", "CreateGame"))
         self.createGameButton.setText(_translate("CreateNewGameUI", "CREATE"))
+import create_rc

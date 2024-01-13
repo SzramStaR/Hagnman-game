@@ -1,0 +1,8 @@
+<RCC>
+  <qresource prefix="text">
+    <file>max_players.png</file>
+    <file>create_game.png</file>
+    <file>hangman8.png</file>
+    <file>max_rounds.png</file>
+  </qresource>
+</RCC>
