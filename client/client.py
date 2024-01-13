@@ -53,7 +53,7 @@ MAX_PLAYERS_COUNT = 5
 MAX_ROUNDS_COUNT = 5
 
 
-PLAYERS = 2
+#PLAYERS = 2
 MAX_PLAYERS = 5
 
 class GameWindow(QWidget, Ui_GameScreen):
@@ -70,8 +70,10 @@ class GameWindow(QWidget, Ui_GameScreen):
         self.client_socket = client_socket
         self.players_leaderboard = {}
         self.players_in_gui = {}
+        self.players_count = 0
 
         players_list = players_nicknames.strip().split()
+        self.players_count = len(players_list)
         for nickname in players_list:
             self.players_leaderboard[nickname] = 0
 
@@ -95,12 +97,12 @@ class GameWindow(QWidget, Ui_GameScreen):
                             self.playerHangman5]
                 
 
-        for nickname_label, hangman_label, nickname in zip(nicknames_label[:PLAYERS], hangmans_labels[:PLAYERS], players_nicknames):
+        for nickname_label, hangman_label, nickname in zip(nicknames_label[:self.players_count], hangmans_labels[:self.players_count], players_nicknames):
             nickname_label.setText(nickname)
             self.players_in_gui[nickname] = [nickname_label, hangman_label]
 
-        if PLAYERS < MAX_PLAYERS_COUNT:
-            for nickname_label, hangman_label in zip(nicknames_label[PLAYERS:], hangmans_labels[PLAYERS:]):
+        if self.players_count< MAX_PLAYERS_COUNT:
+            for nickname_label, hangman_label in zip(nicknames_label[self.players_count:], hangmans_labels[self.players_count:]):
                 nickname_label.setText("")
                 hangman_label.setStyleSheet("image: none;")
 
