@@ -138,11 +138,12 @@ class GameWindow(QWidget, Ui_GameScreen):
                 if self.attempts_left_per_game == 0:
 
                     self.client_socket.sendall("f\n".encode('utf-8'))
-                    self.hide()
-                    score_dialog = ScoreuiDialog()
-                    score_dialog.setupUi(score_dialog)
-                    score_dialog.scoreLabel.setText(str(self.total_score))
-                    score_dialog.exec_()
+                    # self.hide()
+                    # score_dialog = ScoreuiDialog()
+                    # score_dialog.setupUi(score_dialog)
+                    # score_dialog.scoreLabel.setText(str(self.total_score))
+                    # score_dialog.exec_()
+                    self.handle_game_over("f")
 
                     #self.handle_game_over("You ran out of attempts for the entire game")
             
@@ -188,16 +189,19 @@ class GameWindow(QWidget, Ui_GameScreen):
     def handle_game_over(self, message):
         #QMessageBox.information(self, "Game Over", message, QMessageBox.Ok)
         self.hide()
-        if message == "You ran out of attempts for the entire game" or message == "You won!!!":
+        if message == "w":
+            self.hide()
             score_dialog = ScoreuiDialog()
-            score_dialog.scoreLabel.setText(self.total_score)
-           
-            score_dialog.show()
+            score_dialog.setupUi(score_dialog)
+            score_dialog.scoreLabel.setText(str(self.total_score))
+            score_dialog.exec_()
         else:
             ranking_dialog = RankingDialog()
-            #TODO: display ranking
+            ranking_dialog.setupUi(ranking_dialog)
+
+
+            ranking_dialog.exec_()
             
-            ranking_dialog.show()
 
         self.round = 0
         self.total_score = 0
@@ -306,11 +310,8 @@ class ConnectionThread(QThread):
                 
             elif mess == "e":
                 
-                self.game_window.hide()
-                score_dialog = ScoreuiDialog()
-                score_dialog.setupUi(score_dialog)
-                score_dialog.scoreLabel.setText(str(self.game_window.total_score))
-                score_dialog.exec_()
+                
+                self.signal_game_end.emit("e")
 
             
 
@@ -322,12 +323,8 @@ class ConnectionThread(QThread):
                 print(player_nickname)
                 self.signal_update_hangman.emit(player_nickname, int(player_chances))
             elif mess == "w":
+                self.signal_game_end.emit("w")
                
-                self.game_window.hide()
-                score_dialog = ScoreuiDialog()
-                score_dialog.setupUi(score_dialog)
-                score_dialog.scoreLabel.setText(str(self.game_window.total_score))
-                score_dialog.exec_()
                 
             else:
                 print("Unexpected message from the server:", mess, " ", len(mess))
