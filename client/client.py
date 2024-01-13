@@ -445,14 +445,18 @@ class RankingDialog(QDialog, Ui_Score):
 
 
     def updateRanking(self, ranking):
+    # Sort the ranking dictionary by scores (converted to int)
+        sorted_ranking = dict(sorted(ranking.items(), key=lambda item: int(item[1]), reverse=True))
+
         for i, (nameLabel, scoreLabel) in enumerate(zip(self.nameLabels, self.scoreLabels)):
-            if i < len(ranking):
-                name, score = list(ranking.items())[i]
+            if i < len(sorted_ranking):
+                name, score = list(sorted_ranking.items())[i]
                 nameLabel.setText(name)
                 scoreLabel.setText(score)
             else:
                 nameLabel.clear()
-                scoreLabel.clear()    
+                scoreLabel.clear()
+    
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
