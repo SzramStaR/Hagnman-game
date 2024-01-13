@@ -102,7 +102,7 @@ void informAllClients(GameInfo *game, const std::string &message) {
 }
 
 class MessageParser{
-    // std::string buffer;
+
 public:
     std::string buffer;
     void addData(const std::string& data){
@@ -263,7 +263,6 @@ void *gameServer(void *arg) {
                     for (int client_socket : game->connectedClients) {
                         if(FD_ISSET(client_socket, &readfds_copy)){
                             char buffer[BUFFER_SIZE];
-                                //case jak wyjdą, niekoniecncznie muszą dostać f
                                 if (game->current_players_count == 1) {
                                         int lastPlayerSocket = sock_to_nickname_map.rbegin()->first;
                                         printf("Last player nickname: %s\n", sock_to_nickname_map.rbegin()->second.c_str());
@@ -291,7 +290,20 @@ void *gameServer(void *arg) {
                                     parser.buffer = "";
                                     if(game->current_round == game->max_rounds_count){
                                         informAllClients(game, "e\n");     
-                                        game->roundAlreadyWon = false;                            
+                                        game->roundAlreadyWon = false;
+
+                                        std::string ranking_to_send = "";
+                                        for(std::map<std::string, int>::iterator it = ranking.begin(); it != ranking.end(); ++it){
+                                            std::string client_nickname = it->first;
+                                            std::string client_score = std::to_string(it->second);
+                                            ranking_to_send += client_nickname + " " + client_score + " ";
+                                                            
+                                        }
+                                        ranking_to_send += "\n";
+                                        printf("%s\n",ranking_to_send.c_str());
+                                        informAllClients(game, ranking_to_send);
+                                
+
                                     }
                                     else{
                                         informAllClients(game, "n\n");
@@ -314,7 +326,7 @@ void *gameServer(void *arg) {
                                     std::string client_chances = std::to_string(chances[sock_to_nickname_map[client_socket]]);
                                     std::string msg_to_send = client_nickname + " " + client_chances  +"\n";
                                     informAllClients(game, msg_to_send);
-                                    //sendChancesToAllClients(game, chances); 
+                                
                                     parser.buffer = "";
                                 }
                                 else if(msg == "f"){
@@ -347,15 +359,7 @@ void *gameServer(void *arg) {
             }
             
             std::lock_guard<std::mutex> lock(game->gameEndLock);
-            std::string ranking_to_send = "";
-            for(std::map<std::string, int>::iterator it = ranking.begin(); it != ranking.end(); ++it){
-                std::string client_nickname = it->first;
-                std::string client_score = std::to_string(it->second);
-                ranking_to_send += client_nickname + " " + client_score + " ";
-                                
-            }
-            ranking_to_send += "\n";
-            informAllClients(game, ranking_to_send);
+
             printf("Game %d closing...\n", game->id);
             activeGames.erase(game->id);
             for(auto& socket:game->connectedClients){ 
@@ -386,7 +390,7 @@ void *handleClient(void *arg) {
     buffer[valread] = '\0';
     std::string msg(buffer);
 
-    // std::string msg = readMsg(client_socket);
+   
 
     size_t delimiter_pos = msg.find(' ');
     if (delimiter_pos != std::string::npos) {

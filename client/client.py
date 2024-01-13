@@ -1,7 +1,7 @@
 import sys
 from PyQt5.QtWidgets import QApplication, QDialog, QWidget, QMessageBox
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QMutex, QMutexLocker, QEventLoop
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer, QMetaObject
 import socket
 import random
 from time import sleep
@@ -10,7 +10,8 @@ from time import sleep
 # + -> +1 punkt dla gracza
 # - -> -1 szansa
 # w -> wygranie rundy +10 dla gracza
-# f -> przegranie gry - TODO
+# f -> przegranie gry 
+#   wyswietla score
 
 # CO IDZIE DO GRACZA
 # ok -> gracz przyjenty do gry
@@ -24,7 +25,9 @@ from time import sleep
 
 # n -> nowa runda (ktos wygral runde)
 # e -> koniec gry 
+#   po e idzie ranking graczy separowany spacjami
 # w -> klient wygral gre
+#   wyswietla jego score
 
 
 sys.path.append('/StartDialogUI.py')
@@ -49,8 +52,7 @@ BUFFER_SIZE = 1024
 MAX_PLAYERS_COUNT = 5
 MAX_ROUNDS_COUNT = 5
 
-# TODO:
-# changing number of players in game creating
+
 PLAYERS = 2
 MAX_PLAYERS = 5
 
@@ -81,6 +83,7 @@ class GameWindow(QWidget, Ui_GameScreen):
             print("Connected signal_round_start to start_new_round")
   
             connection_thread.signal_game_end.connect(self.handle_game_over)
+            connection_thread.signal_game_end_ranking.connect(self.handle_ranking)
             connection_thread.signal_update_hangman.connect(self.update_hangman)
     
     def set_players_info_gui(self, players_nicknames):
@@ -184,22 +187,17 @@ class GameWindow(QWidget, Ui_GameScreen):
     def handle_game_over(self, message):
         
         self.hide()
-        if message == "w" or message == "f":
-            if message == "w":
-                QMessageBox.information(self, "Game Over", "YOU WON!!!", QMessageBox.Ok)
-            else:
-                QMessageBox.information(self, "Game Over", "YOU LOST!!!", QMessageBox.Ok)
-            self.hide()
-            score_dialog = ScoreuiDialog()
-            score_dialog.setupUi(score_dialog)
-            score_dialog.scoreLabel.setText(str(self.total_score))
-            score_dialog.exec_()
+        
+        if message == "w":
+            QMessageBox.information(self, "Game Over", "YOU WON!!!", QMessageBox.Ok)
         else:
-            ranking_dialog = RankingDialog()
-            ranking_dialog.setupUi(ranking_dialog)
-
-
-            ranking_dialog.exec_()
+            QMessageBox.information(self, "Game Over", "YOU LOST!!!", QMessageBox.Ok)
+    
+        score_dialog = ScoreuiDialog()
+        score_dialog.setupUi(score_dialog)
+        score_dialog.scoreLabel.setText(str(self.total_score))
+        score_dialog.exec_()
+        
             
 
         self.round = 0
@@ -209,12 +207,19 @@ class GameWindow(QWidget, Ui_GameScreen):
         startDialog.gameIdEdit.setText("")
         startDialog.show()
 
+    def handle_ranking(self, ranking):
+        self.hide()
+        ranking_dialog = RankingDialog()
+        ranking_dialog.setupUi(ranking_dialog)
+        ranking_dialog.updateRanking(ranking)
+        ranking_dialog.exec_()
 
 
 class ConnectionThread(QThread):
     signal_game_start = pyqtSignal(str, str)
     signal_round_start = pyqtSignal(str)
     signal_game_end = pyqtSignal(str)
+    signal_game_end_ranking = pyqtSignal(dict)
     signal_update_hangman = pyqtSignal(str, int)
     
 
@@ -309,21 +314,14 @@ class ConnectionThread(QThread):
                 
             elif mess == "e":
                 
-                self.signal_game_end.emit("e")
-                ranking_info, chunk = self.split_serv_msg(chunk[2:])  # Skip "r " prefix
-
-                # Parse ranking information into a dictionary
+                
+                ranking_info, chunk = self.split_serv_msg(chunk[2:]) 
                 ranking_dict = dict(zip(*[iter(ranking_info.split())] * 2))
-
-                # Update the players_ranking dictionary
                 self.players_ranking = ranking_dict
                 print(self.players_ranking)
-                # Emit a signal or handle the ranking update as needed in your UI
-                self.signal_game_end.emit("e")
+
+                self.signal_game_end_ranking.emit(self.players_ranking)
                 
-
-            
-
             elif mess == "-":
                 player_info, chunk = self.split_serv_msg(chunk)
                 player_info = player_info.split()
@@ -331,6 +329,7 @@ class ConnectionThread(QThread):
                 player_chances = player_info[1]     
                 print(player_nickname)
                 self.signal_update_hangman.emit(player_nickname, int(player_chances))
+            
             elif mess == "w":
                 self.signal_game_end.emit("w")
                
@@ -432,6 +431,26 @@ class RankingDialog(QDialog, Ui_Score):
     def __init__(self):
         super(RankingDialog, self).__init__()
         self.setupUi(self)
+
+    def setupUi(self, Score):
+        super().setupUi(Score)
+
+        self.nameLabels = [self.nameLabel_1, self.nameLabel_2, self.nameLabel_3, self.nameLabel_4, self.nameLabel_5]
+        self.scoreLabels = [self.scoreLabel_1, self.scoreLabel_2, self.scoreLabel_3, self.scoreLabel_4, self.scoreLabel_5]
+
+        self.retranslateUi(Score)
+        QMetaObject.connectSlotsByName(Score)
+
+
+    def updateRanking(self, ranking):
+        for i, (nameLabel, scoreLabel) in enumerate(zip(self.nameLabels, self.scoreLabels)):
+            if i < len(ranking):
+                name, score = list(ranking.items())[i]
+                nameLabel.setText(name)
+                scoreLabel.setText(score)
+            else:
+                nameLabel.clear()
+                scoreLabel.clear()    
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
