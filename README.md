@@ -1,4 +1,1 @@
-Autorzy\
-Julia Jaromirska 151600\
-Miłosz Koźlicki 151873
-
+Hangman-game made in C++ and Python with the usage of BSD sockets.
